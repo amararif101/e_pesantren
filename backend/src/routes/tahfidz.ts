@@ -17,6 +17,10 @@ import {
   settings,
   classes,
   rooms,
+  teacherAttendances,
+  healthExaminations,
+  studentLeaves,
+  studentLeaveItems,
 } from "../db/schema";
 import {
   eq,
@@ -33,7 +37,9 @@ import {
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getJuzFromPage, getJuzFromSurah } from "../utils/quran-mapping";
-import { authMiddleware } from "../middleware/auth";
+import { checkJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
+import { canBackdateTahfidzDeposit, isDateBeforeToday } from "../utils/tahfidz-permission";
+import { authMiddleware, requirePermission } from "../middleware/auth";
 import {
   assertAcademicPeriodWritable,
   assertDateInWritableAcademicPeriod,
@@ -66,8 +72,9 @@ app.use("*", authMiddleware);
 const depositSchema = z.object({
   studentId: z.number(),
   teacherId: z.number(),
-  type: z.enum(["ziyadah", "murajaah", "izin", "alpha", "sakit"]),
+  type: z.enum(["ziyadah", "murajaah", "sabqi", "manzil", "izin", "alpha", "sakit", "tidak_setor"]),
   isLate: z.boolean().optional(),
+  isCompleted: z.boolean().nullable().optional(),
   // New line-based position fields
   startSurah: z.number().nullable().optional(),
   startAyat: z.number().nullable().optional(),
@@ -85,7 +92,7 @@ const depositSchema = z.object({
   ayatEnd: z.number().nullable().optional(),
   pageNumber: z.number().nullable().optional(),
   // Other
-  fluency: z.enum(["lancar", "kurang_lancar", "mengulang"]).optional(),
+  fluency: z.enum(["A", "B", "C"]).optional(),
   notes: z.string().optional(),
   depositDate: z.string().optional(),
 });
@@ -94,7 +101,9 @@ const examSchema = z.object({
   studentId: z.number(),
   examinerId: z.number(),
   examType: z.string(),
-  examCategory: z.enum(["UPK", "UKJ", "UA", "Suluk", "Other"]).optional(),
+  examCategory: z
+    .enum(["UPK", "UKJ", "UA", "Suluk", "Jilsah", "Sertifikasi", "Other"])
+    .optional(),
   // New filtering fields
   academicYear: z.string().optional(),
   semester: z.enum(["1", "2", "ganjil", "genap"]).optional(),
@@ -107,6 +116,22 @@ const examSchema = z.object({
   scoreTajwid: z.number().optional(),
   scoreMakhraj: z.number().optional(),
   scoreAdab: z.number().optional(),
+  // UPK & UKJ & UA
+  nilai1: z.number().nullable().optional(),
+  nilai2: z.number().nullable().optional(),
+  nilai3: z.number().nullable().optional(),
+  nilai4: z.number().nullable().optional(),
+  nilai5: z.number().nullable().optional(),
+  nilai6: z.number().nullable().optional(),
+  nilai7: z.number().nullable().optional(),
+  nilai8: z.number().nullable().optional(),
+  nilai9: z.number().nullable().optional(),
+  // UPK & UA
+  capaianTargetPages: z.number().nullable().optional(),
+  capaianTargetScore: z.number().nullable().optional(),
+  // Jilsah & Sertifikasi
+  khotoJaliCount: z.number().nullable().optional(),
+  khotoKhofiCount: z.number().nullable().optional(),
   finalScore: z.number(),
   verdict: z.enum(["pass", "fail", "conditional"]),
   notes: z.string().optional(),
@@ -228,6 +253,7 @@ app.get("/deposits", async (c) => {
         studentId: tahfidzDeposits.studentId,
         date: tahfidzDeposits.depositDate,
         type: tahfidzDeposits.type,
+        isCompleted: tahfidzDeposits.isCompleted,
         surah: tahfidzDeposits.surahName,
         ayatStart: tahfidzDeposits.ayatStart,
         ayatEnd: tahfidzDeposits.ayatEnd,
@@ -351,16 +377,49 @@ app.post("/deposits", zValidator("json", depositSchema), async (c) => {
   const body = c.req.valid("json");
   try {
     const depositDate = body.depositDate ? new Date(body.depositDate) : new Date();
+
+    if (isDateBeforeToday(depositDate)) {
+      const user = c.get("user");
+      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
+      if (!allowed) {
+        return c.json(
+          {
+            success: false,
+            message:
+              "Pengampu halaqoh hanya dapat menginput setoran untuk hari ini. Input untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.",
+          },
+          403,
+        );
+      }
+    }
+
     await assertDateInWritableAcademicPeriod(
       depositDate,
       "mencatat setoran tahfidz",
     );
+
+    // Taqdim (ziyadah) is blocked once the student has finished a juz until
+    // they pass the UKJ exam for it.
+    if (body.type === "ziyadah") {
+      const juzBlock = await checkJuzCompletionBlock(body.studentId);
+      if (juzBlock.blocked) {
+        return c.json(
+          {
+            success: false,
+            message: `Santri harus mengikuti dan lulus Ujian Kenaikan Juz (UKJ) untuk Juz ${juzBlock.completedJuz} sebelum bisa melanjutkan setoran Taqdim.`,
+            juzBlocked: juzBlock.completedJuz,
+          },
+          400,
+        );
+      }
+    }
 
     await db.insert(tahfidzDeposits).values({
       studentId: body.studentId,
       teacherId: body.teacherId,
       type: body.type,
       isLate: body.isLate || false,
+      isCompleted: body.isCompleted ?? null,
       // New line-based fields
       startSurah: body.startSurah ?? null,
       startAyat: body.startAyat ?? null,
@@ -382,7 +441,17 @@ app.post("/deposits", zValidator("json", depositSchema), async (c) => {
       notes: body.notes ?? null,
       depositDate,
     });
-    return c.json({ success: true, message: "Setoran berhasil dicatat" });
+
+    const juzCompleted =
+      body.type === "ziyadah"
+        ? getJuzIfCompleted(body.endSurah, body.endAyat)
+        : null;
+
+    return c.json({
+      success: true,
+      message: "Setoran berhasil dicatat",
+      juzCompleted,
+    });
   } catch (e: any) {
     const guardResponse = academicPeriodGuardErrorResponse(c, e);
     if (guardResponse) return guardResponse;
@@ -428,6 +497,22 @@ app.put("/deposits/:id", zValidator("json", depositSchema), async (c) => {
       "mengubah setoran tahfidz",
     );
     const depositDate = body.depositDate ? new Date(body.depositDate) : new Date();
+
+    if (isDateBeforeToday(depositDate)) {
+      const user = c.get("user");
+      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
+      if (!allowed) {
+        return c.json(
+          {
+            success: false,
+            message:
+              "Pengampu halaqoh hanya dapat mengubah setoran untuk hari ini. Perubahan untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.",
+          },
+          403,
+        );
+      }
+    }
+
     await assertDateInWritableAcademicPeriod(
       depositDate,
       "mengubah setoran tahfidz",
@@ -440,6 +525,7 @@ app.put("/deposits/:id", zValidator("json", depositSchema), async (c) => {
         teacherId: body.teacherId,
         type: body.type,
         isLate: body.isLate || false,
+        isCompleted: body.isCompleted ?? null,
         // New line-based fields
         startSurah: body.startSurah ?? null,
         startAyat: body.startAyat ?? null,
@@ -614,6 +700,19 @@ app.get("/exams", async (c) => {
         scoreTajwid: tahfidzExams.scoreTajwid,
         scoreMakhraj: tahfidzExams.scoreMakhraj,
         scoreAdab: tahfidzExams.scoreAdab,
+        nilai1: tahfidzExams.nilai1,
+        nilai2: tahfidzExams.nilai2,
+        nilai3: tahfidzExams.nilai3,
+        nilai4: tahfidzExams.nilai4,
+        nilai5: tahfidzExams.nilai5,
+        nilai6: tahfidzExams.nilai6,
+        nilai7: tahfidzExams.nilai7,
+        nilai8: tahfidzExams.nilai8,
+        nilai9: tahfidzExams.nilai9,
+        capaianTargetPages: tahfidzExams.capaianTargetPages,
+        capaianTargetScore: tahfidzExams.capaianTargetScore,
+        khotoJaliCount: tahfidzExams.khotoJaliCount,
+        khotoKhofiCount: tahfidzExams.khotoKhofiCount,
         notes: tahfidzExams.notes,
         juz: tahfidzExams.juz,
         startPage: tahfidzExams.startPage,
@@ -784,6 +883,121 @@ app.put("/exams/:id", zValidator("json", examSchema), async (c) => {
   }
 });
 
+// GET /capaian-target/:studentId - Halaman dihafal 2 pekan terakhir vs target,
+// dipakai untuk komponen "Capaian Target" di penilaian Ujian Pekanan (UPK)
+app.get("/capaian-target/:studentId", async (c) => {
+  const studentId = parseInt(c.req.param("studentId"));
+  const examDateStr = c.req.query("examDate") || new Date().toISOString().split("T")[0];
+  const maxScore = Number(c.req.query("maxScore")) || 30; // UPK: 30, UA: 10
+
+  try {
+    const student = await db.query.students.findFirst({
+      where: eq(students.id, studentId),
+      with: { class: true },
+    });
+
+    if (!student) {
+      return c.json({ success: false, message: "Santri tidak ditemukan" }, 404);
+    }
+
+    const halaqahMember = await db.query.halaqahMembers.findFirst({
+      where: and(
+        eq(halaqahMembers.studentId, studentId),
+        eq(halaqahMembers.status, "active"),
+      ),
+      with: { halaqah: true },
+    });
+
+    // Target lookup (same priority as report-card): halaqah level link, then
+    // class/grade name matching, then first available target as fallback.
+    const allTargets = await db.select().from(tahfidzTargets);
+    let target = null as (typeof allTargets)[number] | null;
+
+    if (halaqahMember?.halaqah && (halaqahMember.halaqah as any).targetLevelId) {
+      const tId = (halaqahMember.halaqah as any).targetLevelId;
+      target = allTargets.find((t) => t.id === tId) || null;
+    }
+
+    if (!target && student.class?.name) {
+      const className = student.class.name.toUpperCase();
+      const exactMatch = allTargets.find((t) =>
+        className.includes(t.level.toUpperCase()),
+      );
+      if (exactMatch) target = exactMatch;
+      else if (
+        className.includes("SMP") ||
+        className.includes("7") ||
+        className.includes("8") ||
+        className.includes("9")
+      ) {
+        let match = allTargets.find((t) => t.level === "SMP");
+        if (!match && className.includes("7"))
+          match = allTargets.find((t) => t.level === "1");
+        if (!match && className.includes("8"))
+          match = allTargets.find((t) => t.level === "2");
+        if (!match && className.includes("9"))
+          match = allTargets.find((t) => t.level === "3");
+        target = match || target;
+      } else if (
+        className.includes("SMA") ||
+        className.includes("ALIYAH") ||
+        className.includes("10") ||
+        className.includes("11") ||
+        className.includes("12")
+      ) {
+        let match = allTargets.find((t) => t.level === "SMA");
+        if (!match && className.includes("10"))
+          match = allTargets.find((t) => t.level === "1");
+        target = match || target;
+      }
+    }
+
+    if (!target) target = allTargets[0] || ({ targetPages: 50, level: "Default" } as any);
+
+    const targetPages = target.targetPages || 50;
+
+    // Achieved: pages memorized (Taqdim) in the 14 days ending at examDate
+    const examDate = new Date(examDateStr);
+    const startWindow = new Date(examDate);
+    startWindow.setDate(startWindow.getDate() - 13);
+
+    const recentDeposits = await db
+      .select({ totalPages: tahfidzDeposits.totalPages })
+      .from(tahfidzDeposits)
+      .where(
+        and(
+          eq(tahfidzDeposits.studentId, studentId),
+          eq(tahfidzDeposits.type, "ziyadah"),
+          sql`DATE(${tahfidzDeposits.depositDate}) >= ${startWindow.toISOString().split("T")[0]}`,
+          sql`DATE(${tahfidzDeposits.depositDate}) <= ${examDateStr}`,
+        ),
+      );
+
+    const achievedPages = recentDeposits.reduce(
+      (sum, d) => sum + (Number(d.totalPages) || 0),
+      0,
+    );
+
+    const capaianTargetScore = Math.round(
+      Math.min(achievedPages / targetPages, 1) * maxScore * 100,
+    ) / 100;
+
+    return c.json({
+      success: true,
+      data: {
+        achievedPages,
+        targetPages,
+        capaianTargetScore,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 // DELETE /exams/:id - Delete
 app.delete("/exams/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -852,30 +1066,37 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     });
 
     // 3. Map students to their status
-    const summary = members.map((m) => {
-      const studentDeposit = deposits.find((d) => d.studentId === m.studentId);
-      // Determine status: 'done' if deposit exists, else 'none'
-      // Only students in the group are returned.
+    // Taqdim (ziyadah), Sabqi, and Manzil are independent per day: a student
+    // can have all three on the same date. Izin/Alpha/Sakit/Tidak Setor are
+    // day-level exceptions (a student marked absent normally won't also have
+    // a hafalan entry that day).
+    const summary = await Promise.all(
+      members.map(async (m) => {
+        const studentDeposits = deposits.filter(
+          (d) => d.studentId === m.studentId,
+        );
+        const exceptionDeposit = studentDeposits.find((d) =>
+          ["izin", "alpha", "sakit", "tidak_setor"].includes(d.type),
+        );
+        const juzBlock = await checkJuzCompletionBlock(m.studentId);
 
-      return {
-        student: {
-          id: m.student.id,
-          name: m.student.fullName,
-          nis: m.student.nis,
-          avatar: m.student.photo,
-        },
-        status: studentDeposit
-          ? studentDeposit.type === "izin"
-            ? "izin"
-            : studentDeposit.type === "alpha"
-              ? "alpha"
-              : studentDeposit.type === "sakit"
-                ? "sakit"
-                : "done"
-          : "none",
-        deposit: studentDeposit || null,
-      };
-    });
+        return {
+          student: {
+            id: m.student.id,
+            name: m.student.fullName,
+            nis: m.student.nis,
+            avatar: m.student.photo,
+          },
+          status: exceptionDeposit
+            ? exceptionDeposit.type
+            : studentDeposits.length > 0
+              ? "done"
+              : "none",
+          deposits: studentDeposits,
+          juzBlock,
+        };
+      }),
+    );
 
     return c.json({
       success: true,
@@ -886,6 +1107,455 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
         totalDone: deposits.length,
       },
     });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// GET /monitoring-dashboard - school-wide daily/monthly monitoring for the
+// tahfidz division: mentor attendance, sick/permission counts, per-type
+// (Ziyadah/Sabqi/Manzil) non-submission tracking, achievement totals,
+// at-risk students, per-halaqah summary, UKJ-blocked count, 30-day trend,
+// and a monthly leaderboard.
+app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), async (c) => {
+  try {
+    const dateStr = c.req.query("date") || new Date().toISOString().split("T")[0];
+    const targetDate = new Date(dateStr);
+    const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+    const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
+      .toISOString()
+      .split("T")[0];
+    const trendStart = new Date(targetDate);
+    trendStart.setDate(trendStart.getDate() - 29);
+    const trendStartStr = trendStart.toISOString().split("T")[0];
+
+    // 1. Active halaqah groups with mentors and members
+    const groups = await db.query.halaqahGroups.findMany({
+      where: eq(halaqahGroups.status, "active"),
+      with: {
+        mentors: { where: eq(halaqahMentors.status, "active"), with: { teacher: true } },
+        members: { where: eq(halaqahMembers.status, "active"), with: { student: true } },
+        targetLevel: true,
+      },
+    });
+
+    const allTargets = await db.select().from(tahfidzTargets);
+    const defaultTargetPages = allTargets[0]?.targetPages || 6;
+
+    const activeStudentIds = groups.flatMap((g) => g.members.map((m) => m.studentId));
+    const mentorTeacherIds = [
+      ...new Set(groups.flatMap((g) => g.mentors.map((m) => m.teacherId))),
+    ];
+
+    // 2. Mentor attendance for the selected date
+    const mentorAttendanceRows = mentorTeacherIds.length
+      ? await db
+          .select()
+          .from(teacherAttendances)
+          .where(
+            and(
+              inArray(teacherAttendances.teacherId, mentorTeacherIds),
+              eq(teacherAttendances.date, dateStr),
+            ),
+          )
+      : [];
+    const attendanceByTeacher = new Map(
+      mentorAttendanceRows.map((r) => [r.teacherId, r.status]),
+    );
+
+    const mentorAttendancePerHalaqah = groups.map((g) => ({
+      halaqahId: g.id,
+      halaqahName: g.name,
+      mentors: g.mentors.map((m) => ({
+        teacherId: m.teacherId,
+        fullName: m.teacher?.fullName || "-",
+        role: m.role,
+        status: attendanceByTeacher.get(m.teacherId) || "not_recorded",
+      })),
+    }));
+
+    const mentorStatusCounts = { present: 0, late: 0, absent: 0, not_recorded: 0, other: 0 };
+    mentorTeacherIds.forEach((tId) => {
+      const status = attendanceByTeacher.get(tId);
+      if (!status) mentorStatusCounts.not_recorded++;
+      else if (status === "present") mentorStatusCounts.present++;
+      else if (status === "late") mentorStatusCounts.late++;
+      else if (status === "absent") mentorStatusCounts.absent++;
+      else mentorStatusCounts.other++;
+    });
+
+    // 2b. Mentor attendance recap for the whole month
+    const mentorAttendanceMonthRows = mentorTeacherIds.length
+      ? await db
+          .select()
+          .from(teacherAttendances)
+          .where(
+            and(
+              inArray(teacherAttendances.teacherId, mentorTeacherIds),
+              sql`${teacherAttendances.date} >= ${monthStart}`,
+              sql`${teacherAttendances.date} <= ${monthEnd}`,
+            ),
+          )
+      : [];
+    const monthAttendanceByTeacher = new Map();
+    mentorAttendanceMonthRows.forEach((r) => {
+      if (!monthAttendanceByTeacher.has(r.teacherId)) {
+        monthAttendanceByTeacher.set(r.teacherId, { present: 0, late: 0, absent: 0, other: 0 });
+      }
+      const bucket = monthAttendanceByTeacher.get(r.teacherId);
+      if (r.status === "present") bucket.present++;
+      else if (r.status === "late") bucket.late++;
+      else if (r.status === "absent") bucket.absent++;
+      else bucket.other++;
+    });
+    const mentorAttendanceMonthlyPerHalaqah = groups.map((g) => ({
+      halaqahId: g.id,
+      halaqahName: g.name,
+      mentors: g.mentors.map((m) => ({
+        teacherId: m.teacherId,
+        fullName: m.teacher?.fullName || "-",
+        role: m.role,
+        ...(monthAttendanceByTeacher.get(m.teacherId) || { present: 0, late: 0, absent: 0, other: 0 }),
+      })),
+    }));
+
+    // 3-5. Deposits for the selected date across every active tahfidz student
+    const dayDeposits = activeStudentIds.length
+      ? await db.query.tahfidzDeposits.findMany({
+          where: and(
+            inArray(tahfidzDeposits.studentId, activeStudentIds),
+            sql`DATE(${tahfidzDeposits.depositDate}) = ${dateStr}`,
+          ),
+        })
+      : [];
+    const depositsByStudent = new Map();
+    dayDeposits.forEach((d) => {
+      if (!depositsByStudent.has(d.studentId)) depositsByStudent.set(d.studentId, []);
+      depositsByStudent.get(d.studentId).push(d);
+    });
+
+    const sakitList = [];
+    const izinList = [];
+    let ziyadahMissing = 0;
+    let sabqiMissing = 0;
+    let manzilMissing = 0;
+    let excusedCount = 0;
+    const perHalaqahSubmission = [];
+
+    groups.forEach((g) => {
+      let hZiyadahMissing = 0;
+      let hSabqiMissing = 0;
+      let hManzilMissing = 0;
+      g.members.forEach((m) => {
+        const studentDeposits = depositsByStudent.get(m.studentId) || [];
+        const exception = studentDeposits.find((d) =>
+          ["izin", "alpha", "sakit", "tidak_setor"].includes(d.type),
+        );
+        if (exception?.type === "sakit") {
+          sakitList.push({ studentId: m.studentId, fullName: m.student?.fullName, halaqahName: g.name });
+        }
+        if (exception?.type === "izin") {
+          izinList.push({ studentId: m.studentId, fullName: m.student?.fullName, halaqahName: g.name });
+        }
+        if (exception) {
+          excusedCount++;
+          return; // excused students are not counted as "belum setor"
+        }
+        const hasType = (t) => studentDeposits.some((d) => d.type === t);
+        if (!hasType("ziyadah")) { ziyadahMissing++; hZiyadahMissing++; }
+        if (!hasType("sabqi")) { sabqiMissing++; hSabqiMissing++; }
+        if (!hasType("manzil")) { manzilMissing++; hManzilMissing++; }
+      });
+      perHalaqahSubmission.push({
+        halaqahId: g.id,
+        halaqahName: g.name,
+        ziyadahMissing: hZiyadahMissing,
+        sabqiMissing: hSabqiMissing,
+        manzilMissing: hManzilMissing,
+      });
+    });
+
+    // 5b. Sakit/Izin recap for the whole month
+    const monthDeposits = activeStudentIds.length
+      ? await db.query.tahfidzDeposits.findMany({
+          where: and(
+            inArray(tahfidzDeposits.studentId, activeStudentIds),
+            inArray(tahfidzDeposits.type, ["sakit", "izin"]),
+            sql`DATE(${tahfidzDeposits.depositDate}) >= ${monthStart}`,
+            sql`DATE(${tahfidzDeposits.depositDate}) <= ${monthEnd}`,
+          ),
+          orderBy: [desc(tahfidzDeposits.depositDate)],
+        })
+      : [];
+    const studentNameById = new Map();
+    const studentHalaqahById = new Map();
+    groups.forEach((g) =>
+      g.members.forEach((m) => {
+        studentNameById.set(m.studentId, m.student?.fullName);
+        studentHalaqahById.set(m.studentId, g.name);
+      }),
+    );
+    const sakitListMonth = monthDeposits
+      .filter((d) => d.type === "sakit")
+      .map((d) => ({
+        studentId: d.studentId,
+        fullName: studentNameById.get(d.studentId),
+        halaqahName: studentHalaqahById.get(d.studentId),
+        date: new Date(d.depositDate).toISOString().split("T")[0],
+      }));
+    const izinListMonth = monthDeposits
+      .filter((d) => d.type === "izin")
+      .map((d) => ({
+        studentId: d.studentId,
+        fullName: studentNameById.get(d.studentId),
+        halaqahName: studentHalaqahById.get(d.studentId),
+        date: new Date(d.depositDate).toISOString().split("T")[0],
+      }));
+
+    // 6. Achievement this month (Ziyadah pages only, matching Mading/Rapor convention)
+    const achievementRows = activeStudentIds.length
+      ? await db
+          .select({
+            halaqahId: halaqahMembers.halaqahId,
+            totalPages: sql`sum(${tahfidzDeposits.totalPages})`,
+          })
+          .from(tahfidzDeposits)
+          .innerJoin(halaqahMembers, eq(tahfidzDeposits.studentId, halaqahMembers.studentId))
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              eq(tahfidzDeposits.type, "ziyadah"),
+              eq(halaqahMembers.status, "active"),
+              sql`DATE(${tahfidzDeposits.depositDate}) >= ${monthStart}`,
+              sql`DATE(${tahfidzDeposits.depositDate}) <= ${monthEnd}`,
+            ),
+          )
+          .groupBy(halaqahMembers.halaqahId)
+      : [];
+    const achievedByHalaqah = new Map(
+      achievementRows.map((r) => [r.halaqahId, Number(r.totalPages) || 0]),
+    );
+
+    let totalPagesThisMonth = 0;
+    const achievementPerHalaqah = groups.map((g) => {
+      const achieved = achievedByHalaqah.get(g.id) || 0;
+      totalPagesThisMonth += achieved;
+      const targetPages = g.targetLevel?.targetPages || defaultTargetPages;
+      const memberCount = g.members.length || 1;
+      const percentage =
+        Math.round((achieved / (targetPages * memberCount)) * 1000) / 10;
+      return { halaqahId: g.id, halaqahName: g.name, totalPages: achieved, targetPages, percentage };
+    });
+    const averagePercentage = achievementPerHalaqah.length
+      ? Math.round(
+          (achievementPerHalaqah.reduce((sum, h) => sum + h.percentage, 0) /
+            achievementPerHalaqah.length) * 10,
+        ) / 10
+      : 0;
+
+    // 7. At-risk students: no Ziyadah/Sabqi/Manzil deposit in the longest time
+    const lastSubmissionRows = activeStudentIds.length
+      ? await db
+          .select({
+            studentId: tahfidzDeposits.studentId,
+            lastDate: sql`max(DATE(${tahfidzDeposits.depositDate}))`,
+          })
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              inArray(tahfidzDeposits.type, ["ziyadah", "sabqi", "manzil"]),
+            ),
+          )
+          .groupBy(tahfidzDeposits.studentId)
+      : [];
+    const lastSubmissionByStudent = new Map(
+      lastSubmissionRows.map((r) => [r.studentId, r.lastDate]),
+    );
+    const AT_RISK_DAYS = 3;
+    const atRisk = [];
+    groups.forEach((g) => {
+      g.members.forEach((m) => {
+        const lastDate = lastSubmissionByStudent.get(m.studentId);
+        const daysSince = lastDate
+          ? Math.floor((targetDate - new Date(lastDate)) / (1000 * 60 * 60 * 24))
+          : null;
+        if (daysSince === null || daysSince >= AT_RISK_DAYS) {
+          atRisk.push({
+            studentId: m.studentId,
+            fullName: m.student?.fullName,
+            halaqahName: g.name,
+            daysSinceLastSubmission: daysSince,
+          });
+        }
+      });
+    });
+    atRisk.sort((a, b) => (b.daysSinceLastSubmission ?? 9999) - (a.daysSinceLastSubmission ?? 9999));
+
+    // 8. Per-halaqah summary table
+    const halaqahSummary = groups.map((g) => {
+      const submission = perHalaqahSubmission.find((s) => s.halaqahId === g.id);
+      const presentToday = g.members.filter((m) => {
+        const deposits = depositsByStudent.get(m.studentId) || [];
+        return deposits.some((d) => ["ziyadah", "sabqi", "manzil"].includes(d.type));
+      }).length;
+      const achievement = achievementPerHalaqah.find((a) => a.halaqahId === g.id);
+      const leadMentor = g.mentors.find((m) => m.role === "lead") || g.mentors[0];
+      return {
+        halaqahId: g.id,
+        halaqahName: g.name,
+        mentorName: leadMentor?.teacher?.fullName || "-",
+        totalStudents: g.members.length,
+        presentToday,
+        achievementPercentage: achievement?.percentage || 0,
+        ziyadahMissing: submission?.ziyadahMissing || 0,
+        sabqiMissing: submission?.sabqiMissing || 0,
+        manzilMissing: submission?.manzilMissing || 0,
+      };
+    });
+
+    // 9. UKJ-blocked students
+    const juzBlockResults = await Promise.all(
+      groups.flatMap((g) =>
+        g.members.map(async (m) => ({
+          studentId: m.studentId,
+          fullName: m.student?.fullName,
+          halaqahName: g.name,
+          block: await checkJuzCompletionBlock(m.studentId),
+        })),
+      ),
+    );
+    const ukjBlockedList = juzBlockResults
+      .filter((r) => r.block.blocked)
+      .map((r) => ({
+        studentId: r.studentId,
+        fullName: r.fullName,
+        halaqahName: r.halaqahName,
+        juz: r.block.completedJuz,
+      }));
+
+    // 10. 30-day submission trend
+    const trendRows = activeStudentIds.length
+      ? await db
+          .select({
+            date: sql`DATE(${tahfidzDeposits.depositDate})`,
+            count: sql`count(*)`,
+          })
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              inArray(tahfidzDeposits.type, ["ziyadah", "sabqi", "manzil"]),
+              sql`DATE(${tahfidzDeposits.depositDate}) >= ${trendStartStr}`,
+              sql`DATE(${tahfidzDeposits.depositDate}) <= ${dateStr}`,
+            ),
+          )
+          .groupBy(sql`DATE(${tahfidzDeposits.depositDate})`)
+      : [];
+    const trendByDate = new Map(trendRows.map((r) => [String(r.date), Number(r.count)]));
+    const weeklyTrend = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(trendStart);
+      d.setDate(d.getDate() + i);
+      const key = d.toISOString().split("T")[0];
+      weeklyTrend.push({ date: key, count: trendByDate.get(key) || 0 });
+    }
+
+    // 11. Leaderboard: top 10 by Ziyadah pages this month
+    const leaderboardRows = activeStudentIds.length
+      ? await db
+          .select({
+            studentId: tahfidzDeposits.studentId,
+            totalPages: sql`sum(${tahfidzDeposits.totalPages})`,
+          })
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              eq(tahfidzDeposits.type, "ziyadah"),
+              sql`DATE(${tahfidzDeposits.depositDate}) >= ${monthStart}`,
+              sql`DATE(${tahfidzDeposits.depositDate}) <= ${monthEnd}`,
+            ),
+          )
+          .groupBy(tahfidzDeposits.studentId)
+          .orderBy(desc(sql`sum(${tahfidzDeposits.totalPages})`))
+          .limit(10)
+      : [];
+    const studentInfoById = new Map();
+    groups.forEach((g) =>
+      g.members.forEach((m) =>
+        studentInfoById.set(m.studentId, { fullName: m.student?.fullName, halaqahName: g.name }),
+      ),
+    );
+    const leaderboard = leaderboardRows.map((r) => ({
+      studentId: r.studentId,
+      fullName: studentInfoById.get(r.studentId)?.fullName || "-",
+      halaqahName: studentInfoById.get(r.studentId)?.halaqahName || "-",
+      totalPages: Number(r.totalPages) || 0,
+    }));
+
+    return c.json({
+      success: true,
+      data: {
+        date: dateStr,
+        mentorAttendance: {
+          summary: mentorStatusCounts,
+          total: mentorTeacherIds.length,
+          perHalaqah: mentorAttendancePerHalaqah,
+          monthlyPerHalaqah: mentorAttendanceMonthlyPerHalaqah,
+        },
+        studentHealth: {
+          sakit: { count: sakitList.length, list: sakitList, monthList: sakitListMonth },
+          izin: { count: izinList.length, list: izinList, monthList: izinListMonth },
+        },
+        dailySubmission: {
+          summary: { ziyadahMissing, sabqiMissing, manzilMissing, excusedCount, totalActiveStudents: activeStudentIds.length },
+          perHalaqah: perHalaqahSubmission,
+        },
+        achievement: { totalPagesThisMonth, averagePercentage, perHalaqah: achievementPerHalaqah },
+        atRisk: atRisk.slice(0, 20),
+        halaqahSummary,
+        ukjBlocked: { count: ukjBlockedList.length, list: ukjBlockedList },
+        weeklyTrend,
+        leaderboard,
+      },
+    });
+  } catch (e: any) {
+    console.error("Monitoring dashboard error:", e);
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// GET /can-backdate - can the current user submit/edit tahfidz deposits
+// for a date before today? (admin or Divisi Tahfidz head/member only)
+app.get("/can-backdate", async (c) => {
+  try {
+    const user = c.get("user");
+    const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
+    return c.json({ success: true, data: { allowed } });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// GET /juz-status/:studentId - is this student blocked from new Taqdim
+// pending a UKJ exam for a juz they've already finished?
+app.get("/juz-status/:studentId", async (c) => {
+  try {
+    const studentId = parseInt(c.req.param("studentId"));
+    const juzBlock = await checkJuzCompletionBlock(studentId);
+    return c.json({ success: true, data: juzBlock });
   } catch (e: any) {
     return c.json(
       { success: false, message: e.message || "Internal Error" },
@@ -955,10 +1625,10 @@ app.get("/halaqah/:groupId/monthly-summary", async (c) => {
       )
       .groupBy(sql`DATE(${tahfidzDeposits.depositDate})`, tahfidzDeposits.type);
 
-    // { "2024-12-01": { done: 5, permission: 1, alpha: 0, sick: 0 } }
+    // { "2024-12-01": { done: 5, permission: 1, alpha: 0, sick: 0, notSubmitted: 0 } }
     const stats: Record<
       string,
-      { done: number; permission: number; alpha: number; sick: number }
+      { done: number; permission: number; alpha: number; sick: number; notSubmitted: number }
     > = {};
 
     deposits.forEach((d) => {
@@ -968,7 +1638,7 @@ app.get("/halaqah/:groupId/monthly-summary", async (c) => {
       }
 
       if (!stats[dateKey]) {
-        stats[dateKey] = { done: 0, permission: 0, alpha: 0, sick: 0 };
+        stats[dateKey] = { done: 0, permission: 0, alpha: 0, sick: 0, notSubmitted: 0 };
       }
 
       if (d.type === "izin") {
@@ -977,6 +1647,8 @@ app.get("/halaqah/:groupId/monthly-summary", async (c) => {
         stats[dateKey]!.alpha += d.count;
       } else if (d.type === "sakit") {
         stats[dateKey]!.sick += d.count;
+      } else if (d.type === "tidak_setor") {
+        stats[dateKey]!.notSubmitted += d.count;
       } else {
         stats[dateKey]!.done += d.count;
       }
@@ -995,12 +1667,193 @@ app.get("/halaqah/:groupId/monthly-summary", async (c) => {
   }
 });
 
+// GET /halaqah/:groupId/health-summary - count of halaqah members seen by
+// the clinic (sakit) or on a student-affairs leave (izin pulang) in a given
+// month, sourced directly from kesehatan/kesantrian records rather than the
+// mentor's own manual sakit/izin deposit entries.
+app.get("/halaqah/:groupId/health-summary", async (c) => {
+  try {
+    const groupId = parseInt(c.req.param("groupId"));
+    const month = parseInt(c.req.query("month") || "");
+    const year = parseInt(c.req.query("year") || "");
+
+    if (!month || !year) {
+      return c.json(
+        { success: false, message: "Month and Year required" },
+        400,
+      );
+    }
+
+    const members = await db.query.halaqahMembers.findMany({
+      where: and(
+        eq(halaqahMembers.halaqahId, groupId),
+        eq(halaqahMembers.status, "active"),
+      ),
+    });
+    const studentIds = members.map((m) => m.studentId);
+
+    if (!studentIds.length) {
+      return c.json({ success: true, data: { sickCount: 0, leaveCount: 0 } });
+    }
+
+    const lastDay = new Date(year, month, 0).getDate();
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
+
+    const sickRows = await db
+      .selectDistinct({ studentId: healthExaminations.patientId })
+      .from(healthExaminations)
+      .where(
+        and(
+          eq(healthExaminations.patientType, "student"),
+          inArray(healthExaminations.patientId, studentIds),
+          sql`${healthExaminations.examinationDate} >= ${startDate}`,
+          sql`${healthExaminations.examinationDate} <= ${endDate}`,
+        ),
+      );
+
+    const leaveRows = await db
+      .selectDistinct({ studentId: studentLeaveItems.studentId })
+      .from(studentLeaveItems)
+      .innerJoin(studentLeaves, eq(studentLeaveItems.leaveId, studentLeaves.id))
+      .where(
+        and(
+          inArray(studentLeaveItems.studentId, studentIds),
+          sql`${studentLeaves.startDate} <= ${endDate}`,
+          sql`${studentLeaves.endDate} >= ${startDate}`,
+        ),
+      );
+
+    return c.json({
+      success: true,
+      data: { sickCount: sickRows.length, leaveCount: leaveRows.length },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 // --- HALAQAH REPORT ---
+// GET /sertifikasi-report - Mading Sertifikasi: per-halaqah wall report of
+// each member's Sertifikasi exam status/date/score/verdict for a date range.
+app.get("/sertifikasi-report", async (c) => {
+  const halaqahId = c.req.query("halaqahId");
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const gender = c.req.query("gender");
+  const classId = c.req.query("classId");
+
+  if (!halaqahId || !startDate || !endDate) {
+    return c.json(
+      { success: false, message: "halaqahId, startDate, endDate required" },
+      400,
+    );
+  }
+
+  try {
+    const halaqah = await db.query.halaqahGroups.findFirst({
+      where: eq(halaqahGroups.id, Number(halaqahId)),
+    });
+
+    if (!halaqah) {
+      return c.json({ success: false, message: "Halaqah not found" }, 404);
+    }
+
+    const mentorRecord = await db
+      .select({
+        teacherId: halaqahMentors.teacherId,
+        fullName: teachers.fullName,
+      })
+      .from(halaqahMentors)
+      .leftJoin(teachers, eq(halaqahMentors.teacherId, teachers.id))
+      .where(eq(halaqahMentors.halaqahId, Number(halaqahId)))
+      .orderBy(sql`${halaqahMentors.id} ASC`)
+      .limit(1);
+
+    const members = await db
+      .select({
+        studentId: halaqahMembers.studentId,
+        fullName: students.fullName,
+        nis: students.nis,
+        gender: students.gender,
+        classId: students.classId,
+        className: classes.name,
+      })
+      .from(halaqahMembers)
+      .leftJoin(students, eq(halaqahMembers.studentId, students.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(
+        and(
+          eq(halaqahMembers.halaqahId, Number(halaqahId)),
+          eq(halaqahMembers.status, "active"),
+        ),
+      );
+
+    const filteredMembers = members.filter((m) => {
+      if (gender && m.gender !== gender) return false;
+      if (classId && String(m.classId) !== String(classId)) return false;
+      return true;
+    });
+
+    const studentIds = filteredMembers.map((m) => m.studentId);
+
+    const exams = studentIds.length
+      ? await db.query.tahfidzExams.findMany({
+          where: and(
+            inArray(tahfidzExams.studentId, studentIds),
+            eq(tahfidzExams.examCategory, "Sertifikasi"),
+            sql`DATE(${tahfidzExams.examDate}) >= ${startDate}`,
+            sql`DATE(${tahfidzExams.examDate}) <= ${endDate}`,
+          ),
+          orderBy: [desc(tahfidzExams.examDate)],
+        })
+      : [];
+    const examByStudent = new Map();
+    exams.forEach((e) => {
+      if (!examByStudent.has(e.studentId)) examByStudent.set(e.studentId, e);
+    });
+
+    const resultMembers = filteredMembers.map((m) => {
+      const exam = examByStudent.get(m.studentId);
+      return {
+        studentId: m.studentId,
+        fullName: m.fullName,
+        nis: m.nis,
+        classId: m.classId,
+        className: m.className,
+        hasExam: !!exam,
+        examDate: exam?.examDate || null,
+        finalScore: exam?.finalScore ?? null,
+        verdict: exam?.verdict || null,
+      };
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        halaqah: { id: halaqah.id, name: halaqah.name },
+        mentor: mentorRecord[0] || null,
+        dateRange: { startDate, endDate },
+        members: resultMembers,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 app.get("/halaqah-report", async (c) => {
   const halaqahId = c.req.query("halaqahId");
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
   const gender = c.req.query("gender");
+  const classId = c.req.query("classId");
 
   if (!halaqahId || !startDate || !endDate) {
     return c.json(
@@ -1042,9 +1895,11 @@ app.get("/halaqah-report", async (c) => {
         nis: students.nis,
         gender: students.gender,
         classId: students.classId,
+        className: classes.name,
       })
       .from(halaqahMembers)
       .leftJoin(students, eq(halaqahMembers.studentId, students.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
       .where(
         and(
           eq(halaqahMembers.halaqahId, Number(halaqahId)),
@@ -1054,10 +1909,12 @@ app.get("/halaqah-report", async (c) => {
 
     const members = await membersQuery;
 
-    // Filter by gender if provided
-    const filteredMembers = gender
-      ? members.filter((m) => m.gender === gender)
-      : members;
+    // Filter by gender and/or class if provided
+    const filteredMembers = members.filter((m) => {
+      if (gender && m.gender !== gender) return false;
+      if (classId && String(m.classId) !== String(classId)) return false;
+      return true;
+    });
 
     // 4. For each member, get deposits in date range
     const memberData = await Promise.all(
@@ -1079,6 +1936,7 @@ app.get("/halaqah-report", async (c) => {
           alpha: deposits.filter((d) => d.type === "alpha").length,
           sakit: deposits.filter((d) => d.type === "sakit").length,
           terlambat: deposits.filter((d) => d.isLate).length,
+          tidakSetor: deposits.filter((d) => d.type === "tidak_setor").length,
         };
 
         // Get page numbers
@@ -1142,6 +2000,7 @@ app.get("/halaqah-report", async (c) => {
           fullName: member.fullName,
           nis: member.nis,
           classId: member.classId,
+          className: member.className,
           attendance,
           awalHalaman,
           akhirHalaman,
@@ -1175,7 +2034,7 @@ const targetSchema = z.object({
   level: z.string().min(1),
   targetPages: z.number().min(1),
   targetJuz: z.number().optional().nullable(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
 });
 
 // GET /targets - List all
@@ -1246,8 +2105,10 @@ app.delete("/targets/:id", async (c) => {
 // --- EXAM TYPES CRUD ---
 const examTypeSchema = z.object({
   name: z.string().min(1),
-  category: z.enum(["UPK", "UKJ", "UA", "Suluk", "Other"]).default("Other"),
-  description: z.string().optional(),
+  category: z
+    .enum(["UPK", "UKJ", "UA", "Suluk", "Jilsah", "Sertifikasi", "Other"])
+    .default("Other"),
+  description: z.string().nullable().optional(),
 });
 
 // GET /exam-types - List all
@@ -1442,6 +2303,7 @@ app.get("/report-card/:studentId", async (c) => {
       sakit: deposits.filter((d) => d.type?.toLowerCase() === "sakit").length,
       izin: deposits.filter((d) => d.type?.toLowerCase() === "izin").length,
       alpha: deposits.filter((d) => d.type?.toLowerCase() === "alpha").length,
+      tidakSetor: deposits.filter((d) => d.type?.toLowerCase() === "tidak_setor").length,
     };
 
     // 4. Get Cumulative Hafalan (Total Pages) - Filtered by Semester Date Range

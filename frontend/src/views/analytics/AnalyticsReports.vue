@@ -500,7 +500,7 @@
             class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm"
           >
             <h3 class="text-md font-semibold text-slate-800 mb-4">
-              Frekuensi Setoran (Ziyadah/Murajaah/dll)
+              Frekuensi Setoran (Taqdim/Murajaah/dll)
             </h3>
             <div class="h-64">
               <BarChart

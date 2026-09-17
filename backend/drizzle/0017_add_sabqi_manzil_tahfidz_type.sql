@@ -1,0 +1,1 @@
+ALTER TABLE `tahfidz_deposits` MODIFY COLUMN `type` enum('ziyadah','murajaah','sabqi','manzil','izin','alpha','sakit') NOT NULL;

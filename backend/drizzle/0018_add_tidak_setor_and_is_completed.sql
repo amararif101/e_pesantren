@@ -1,0 +1,2 @@
+ALTER TABLE `tahfidz_deposits` MODIFY COLUMN `type` enum('ziyadah','murajaah','sabqi','manzil','izin','alpha','sakit','tidak_setor') NOT NULL;--> statement-breakpoint
+ALTER TABLE `tahfidz_deposits` ADD `is_completed` boolean;

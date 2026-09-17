@@ -25,11 +25,15 @@ export const tahfidzDeposits = mysqlTable("tahfidz_deposits", {
   type: mysqlEnum("type", [
     "ziyadah",
     "murajaah",
+    "sabqi",
+    "manzil",
     "izin",
     "alpha",
     "sakit",
+    "tidak_setor",
   ]).notNull(),
   isLate: boolean("is_late").default(false), // Terlambat flag
+  isCompleted: boolean("is_completed"), // Sudah/Belum, khusus type sabqi & manzil
 
   // Start Position (Dari)
   startSurah: int("start_surah"),
@@ -54,7 +58,7 @@ export const tahfidzDeposits = mysqlTable("tahfidz_deposits", {
   pageNumber: int("page_number"),
 
   // Quality Assessment
-  fluency: mysqlEnum("fluency", ["lancar", "kurang_lancar", "mengulang"]),
+  fluency: mysqlEnum("fluency", ["A", "B", "C"]),
   notes: text("notes"),
 
   createdAt: timestamp("created_at").defaultNow(),
@@ -78,6 +82,8 @@ export const tahfidzExams = mysqlTable("tahfidz_exams", {
     "UKJ",
     "UA",
     "Suluk",
+    "Jilsah",
+    "Sertifikasi",
     "Other",
   ]).default("Other"),
 
@@ -92,9 +98,29 @@ export const tahfidzExams = mysqlTable("tahfidz_exams", {
 
   // Scoring (0-100 or specific rubric)
   scoreFluency: int("score_fluency"), // Kelancaran
-  scoreTajwid: int("score_tajwid"), // Tajwid
+  scoreTajwid: int("score_tajwid"), // Tajwid (UPK/UKJ: max 10)
   scoreMakhraj: int("score_makhraj"), // Makhraj
   scoreAdab: int("score_adab"), // Adab
+
+  // UPK: Nilai 1-4 (max 15 each). UKJ: Nilai 1-6 (max 15 each). UA: Nilai 1-9 (max 10 each)
+  nilai1: int("nilai1"),
+  nilai2: int("nilai2"),
+  nilai3: int("nilai3"),
+  nilai4: int("nilai4"),
+  nilai5: int("nilai5"), // UKJ only
+  nilai6: int("nilai6"), // UKJ only
+  nilai7: int("nilai7"), // UA only
+  nilai8: int("nilai8"), // UA only
+  nilai9: int("nilai9"), // UA only
+
+  // UPK: pages memorized in the last 2 weeks vs. target (max 30).
+  // UA: same formula, max 10.
+  capaianTargetPages: int("capaian_target_pages"),
+  capaianTargetScore: decimal("capaian_target_score", { precision: 5, scale: 2 }),
+
+  // Jilsah & Sertifikasi: error counts (Jali -1/error, Khofi -0.5/error)
+  khotoJaliCount: int("khoto_jali_count"),
+  khotoKhofiCount: int("khoto_khofi_count"),
 
   finalScore: int("final_score").notNull(),
   verdict: mysqlEnum("verdict", ["pass", "fail", "conditional"]).notNull(), // Lulus / Tidak / Bersyarat
@@ -156,7 +182,15 @@ export const tahfidzReportCards = mysqlTable("tahfidz_report_cards", {
 export const tahfidzExamTypes = mysqlTable("tahfidz_exam_types", {
   id: int("id").primaryKey().autoincrement(),
   name: varchar("name", { length: 150 }).notNull(), // e.g., "Ujian Kenaikan Juz 29", "UPK Pekanan"
-  category: mysqlEnum("category", ["UPK", "UKJ", "UA", "Suluk", "Other"])
+  category: mysqlEnum("category", [
+    "UPK",
+    "UKJ",
+    "UA",
+    "Suluk",
+    "Jilsah",
+    "Sertifikasi",
+    "Other",
+  ])
     .notNull()
     .default("Other"),
   description: text("description"),

@@ -163,81 +163,57 @@
             </div>
             <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3">
               <!-- Academic -->
-              <div
-                class="bg-blue-50 rounded-xl p-3 cursor-pointer hover:bg-blue-100 transition-colors"
+              <StatCard
+                icon="solar:diploma-line-duotone"
+                color="blue"
+                label="Akademik"
+                :value="childSummaries[child.id]?.academic?.averageScore || '-'"
+                caption="Rata-rata nilai"
+                class="cursor-pointer hover:border-blue-300 transition-colors"
                 @click="showDetail(child.id, 'academic')"
-              >
-                <div class="flex items-center gap-2 text-blue-600 mb-2">
-                  <Icon icon="solar:diploma-line-duotone" class="w-5 h-5" />
-                  <span class="text-xs font-medium">Akademik</span>
-                </div>
-                <p class="text-2xl font-bold text-blue-700">
-                  {{ childSummaries[child.id]?.academic?.averageScore || "-" }}
-                </p>
-                <p class="text-xs text-blue-600">Rata-rata nilai</p>
-              </div>
+              />
 
               <!-- Discipline -->
-              <div
-                class="bg-amber-50 rounded-xl p-3 cursor-pointer hover:bg-amber-100 transition-colors"
+              <StatCard
+                icon="solar:medal-ribbons-star-line-duotone"
+                color="amber"
+                label="Kedisiplinan"
+                :value="childSummaries[child.id]?.discipline?.netPoints || 0"
+                :value-class="
+                  (childSummaries[child.id]?.discipline?.netPoints || 0) >= 0
+                    ? 'text-green-700'
+                    : 'text-red-700'
+                "
+                caption="Poin bersih"
+                class="cursor-pointer hover:border-amber-300 transition-colors"
                 @click="showDetail(child.id, 'discipline')"
-              >
-                <div class="flex items-center gap-2 text-amber-600 mb-2">
-                  <Icon
-                    icon="solar:medal-ribbons-star-line-duotone"
-                    class="w-5 h-5"
-                  />
-                  <span class="text-xs font-medium">Kedisiplinan</span>
-                </div>
-                <p
-                  class="text-2xl font-bold"
-                  :class="
-                    (childSummaries[child.id]?.discipline?.netPoints || 0) >= 0
-                      ? 'text-green-700'
-                      : 'text-red-700'
-                  "
-                >
-                  {{ childSummaries[child.id]?.discipline?.netPoints || 0 }}
-                </p>
-                <p class="text-xs text-amber-600">Poin bersih</p>
-              </div>
+              />
 
               <!-- Clinic -->
-              <div
-                class="bg-emerald-50 rounded-xl p-3 cursor-pointer hover:bg-emerald-100 transition-colors"
+              <StatCard
+                icon="solar:health-line-duotone"
+                color="emerald"
+                label="Kesehatan"
+                :value="childSummaries[child.id]?.clinic?.visitsCount || 0"
+                caption="Kunjungan klinik"
+                class="cursor-pointer hover:border-emerald-300 transition-colors"
                 @click="showDetail(child.id, 'clinic')"
-              >
-                <div class="flex items-center gap-2 text-emerald-600 mb-2">
-                  <Icon icon="solar:health-line-duotone" class="w-5 h-5" />
-                  <span class="text-xs font-medium">Kesehatan</span>
-                </div>
-                <p class="text-2xl font-bold text-emerald-700">
-                  {{ childSummaries[child.id]?.clinic?.visitsCount || 0 }}
-                </p>
-                <p class="text-xs text-emerald-600">Kunjungan klinik</p>
-              </div>
+              />
 
               <!-- Tahfidz -->
-              <div
-                class="bg-purple-50 rounded-xl p-3 cursor-pointer hover:bg-purple-100 transition-colors"
+              <StatCard
+                icon="solar:book-bookmark-line-duotone"
+                color="purple"
+                label="Tahfidz"
+                :value="
+                  Number(
+                    childSummaries[child.id]?.tahfidz?.totalPages || 0
+                  ).toFixed(1)
+                "
+                caption="Halaman setor"
+                class="cursor-pointer hover:border-purple-300 transition-colors"
                 @click="showDetail(child.id, 'tahfidz')"
-              >
-                <div class="flex items-center gap-2 text-purple-600 mb-2">
-                  <Icon
-                    icon="solar:book-bookmark-line-duotone"
-                    class="w-5 h-5"
-                  />
-                  <span class="text-xs font-medium">Tahfidz</span>
-                </div>
-                <p class="text-2xl font-bold text-purple-700">
-                  {{
-                    Number(
-                      childSummaries[child.id]?.tahfidz?.totalPages || 0
-                    ).toFixed(1)
-                  }}
-                </p>
-                <p class="text-xs text-purple-600">Halaman setor</p>
-              </div>
+              />
             </div>
           </div>
 
@@ -561,8 +537,14 @@
                           'w-10 h-10 rounded-full flex items-center justify-center',
                           deposit.type === 'ziyadah'
                             ? 'bg-purple-100'
+                            : deposit.type === 'sabqi'
+                            ? 'bg-teal-100'
+                            : deposit.type === 'manzil'
+                            ? 'bg-indigo-100'
                             : deposit.type === 'murajaah'
                             ? 'bg-blue-100'
+                            : deposit.type === 'tidak_setor'
+                            ? 'bg-orange-100'
                             : 'bg-slate-200',
                         ]"
                       >
@@ -570,16 +552,27 @@
                           :icon="
                             deposit.type === 'ziyadah'
                               ? 'solar:add-circle-line-duotone'
+                              : deposit.type === 'sabqi' ||
+                                deposit.type === 'manzil'
+                              ? 'solar:refresh-circle-line-duotone'
                               : deposit.type === 'murajaah'
                               ? 'solar:refresh-circle-line-duotone'
+                              : deposit.type === 'tidak_setor'
+                              ? 'solar:close-circle-line-duotone'
                               : 'solar:calendar-mark-line-duotone'
                           "
                           :class="[
                             'w-5 h-5',
                             deposit.type === 'ziyadah'
                               ? 'text-purple-600'
+                              : deposit.type === 'sabqi'
+                              ? 'text-teal-600'
+                              : deposit.type === 'manzil'
+                              ? 'text-indigo-600'
                               : deposit.type === 'murajaah'
                               ? 'text-blue-600'
+                              : deposit.type === 'tidak_setor'
+                              ? 'text-orange-600'
                               : 'text-slate-500',
                           ]"
                         />
@@ -587,7 +580,15 @@
                       <div class="flex-1">
                         <div class="flex items-center justify-between">
                           <span class="font-medium text-slate-800 capitalize">{{
-                            deposit.type
+                            deposit.type === "ziyadah"
+                              ? "Taqdim"
+                              : deposit.type === "tidak_setor"
+                                ? "Tidak Setor"
+                                : deposit.type === "sabqi"
+                                  ? `Sabqi (${deposit.isCompleted ? "Sudah" : "Belum"})`
+                                  : deposit.type === "manzil"
+                                    ? `Manzil (${deposit.isCompleted ? "Sudah" : "Belum"})`
+                                    : deposit.type
                           }}</span>
                           <span class="text-sm text-slate-500">{{
                             formatDateTime(deposit.depositDate)
@@ -618,6 +619,7 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import { authApi, parentDashboardApi } from "@/services/api.js";
 
 const router = useRouter();

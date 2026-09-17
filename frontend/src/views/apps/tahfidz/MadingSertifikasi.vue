@@ -2,8 +2,10 @@
   <div class="p-2 max-w-7xl mx-auto pb-12">
     <!-- Header -->
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-slate-800">Mading Halaqah</h1>
-      <p class="text-slate-500">Laporan capaian hafalan per grup halaqah</p>
+      <h1 class="text-2xl font-bold text-slate-800">Mading Sertifikasi</h1>
+      <p class="text-slate-500">
+        Laporan status ujian sertifikasi per grup halaqah
+      </p>
     </div>
 
     <!-- Filters -->
@@ -135,10 +137,7 @@
       v-else-if="!filters.halaqahId"
       class="h-64 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 text-slate-400"
     >
-      <Icon
-        icon="solar:users-group-rounded-line-duotone"
-        class="text-4xl mb-2"
-      />
+      <Icon icon="solar:diploma-verified-line-duotone" class="text-4xl mb-2" />
       <p>Pilih grup halaqah untuk melihat laporan</p>
     </div>
 
@@ -154,7 +153,7 @@
             <!-- Report Header -->
             <div class="text-center pb-4 mb-6">
               <h2 class="text-xl font-bold uppercase">
-                Pencapaian Hafalan Santri
+                Status Ujian Sertifikasi Santri
               </h2>
               <h3 class="text-lg">Pondok Pesantren Minhajul Haq</h3>
             </div>
@@ -173,11 +172,12 @@
               </div>
               <div class="text-right">
                 <p>
-                  <span class="font-semibold">Target Minimal</span>:
-                  {{ targetPages }} Halaman
+                  <span class="font-semibold">Sudah Ujian</span>:
+                  {{ completedCount }}/{{ report?.members?.length || 0 }}
+                  Santri
                 </p>
                 <p>
-                  <span class="font-semibold">Tanggal Rekap</span>:
+                  <span class="font-semibold">Periode</span>:
                   {{ formatDateRange() }}
                 </p>
               </div>
@@ -188,30 +188,13 @@
               <table class="w-full text-sm border-collapse">
                 <thead>
                   <tr class="bg-slate-100">
-                    <th class="border p-2 text-center" rowspan="2">No</th>
-                    <th class="border p-2 text-left" rowspan="2">
-                      Nama Lengkap
-                    </th>
-                    <th class="border p-2 text-center" rowspan="2">Kelas</th>
-                    <th class="border p-2 text-center" colspan="5">
-                      Kehadiran
-                    </th>
-                    <th class="border p-2 text-center" rowspan="2">Target</th>
-                    <th class="border p-2 text-center" colspan="1">
-                      Hafalan Bulan Ini
-                    </th>
-                    <th class="border p-2 text-center" rowspan="2">
-                      Jumlah Halaman
-                    </th>
-                    <th class="border p-2 text-center" rowspan="2">Ket</th>
-                  </tr>
-                  <tr class="bg-slate-50 text-xs">
-                    <th class="border p-1">S</th>
-                    <th class="border p-1">I</th>
-                    <th class="border p-1">A</th>
-                    <th class="border p-1">T</th>
-                    <th class="border p-1">TS</th>
-                    <th class="border p-1">Rentang Halaman</th>
+                    <th class="border p-2 text-center">No</th>
+                    <th class="border p-2 text-left">Nama Lengkap</th>
+                    <th class="border p-2 text-center">Kelas</th>
+                    <th class="border p-2 text-center">Status</th>
+                    <th class="border p-2 text-center">Tanggal Ujian</th>
+                    <th class="border p-2 text-center">Nilai Akhir</th>
+                    <th class="border p-2 text-center">Verdict</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -226,41 +209,37 @@
                       {{ m.className || "-" }}
                     </td>
                     <td class="border p-2 text-center">
-                      {{ m.attendance?.sakit || 0 }}
+                      <span
+                        class="px-2 py-0.5 rounded text-xs font-medium"
+                        :class="
+                          m.hasExam
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-slate-100 text-slate-500'
+                        "
+                      >
+                        {{ m.hasExam ? "Sudah" : "Belum" }}
+                      </span>
                     </td>
                     <td class="border p-2 text-center">
-                      {{ m.attendance?.izin || 0 }}
-                    </td>
-                    <td class="border p-2 text-center">
-                      {{ m.attendance?.alpha || 0 }}
-                    </td>
-                    <td class="border p-2 text-center">
-                      {{ m.attendance?.terlambat || 0 }}
-                    </td>
-                    <td class="border p-2 text-center">
-                      {{ m.attendance?.tidakSetor || 0 }}
-                    </td>
-                    <td class="border p-2 text-center">
-                      {{ targetPages }} Hal
-                    </td>
-                    <td class="border p-2 text-center">
-                      {{ m.hafalanRanges || "-" }}
+                      {{ formatExamDate(m.examDate) }}
                     </td>
                     <td class="border p-2 text-center font-bold">
-                      {{ m.jumlahHalaman || 0 }}
+                      {{ m.finalScore ?? "-" }}
                     </td>
                     <td class="border p-2 text-center">
                       <span
-                        :class="getStatusClass(m.jumlahHalaman)"
+                        v-if="m.verdict"
+                        :class="getVerdictClass(m.verdict)"
                         class="px-2 py-0.5 rounded text-xs font-medium"
                       >
-                        {{ getStatus(m.jumlahHalaman) }}
+                        {{ getVerdictLabel(m.verdict) }}
                       </span>
+                      <span v-else>-</span>
                     </td>
                   </tr>
                   <tr v-if="!report?.members?.length">
                     <td
-                      colspan="12"
+                      colspan="7"
                       class="border p-4 text-center text-slate-500 italic"
                     >
                       Tidak ada data anggota
@@ -271,33 +250,21 @@
             </div>
 
             <!-- Legend -->
-            <div class="mt-6 grid grid-cols-2 gap-4 text-xs text-slate-600">
-              <div>
-                <p class="font-semibold mb-1">Keterangan Status:</p>
-                <p>
-                  <span class="px-1 bg-green-100 text-green-700 rounded"
-                    >ST</span
-                  >
-                  : Sesuai Target
-                </p>
-                <p>
-                  <span class="px-1 bg-yellow-100 text-yellow-700 rounded"
-                    >DT</span
-                  >
-                  : Di Bawah Target
-                </p>
-                <p>
-                  <span class="px-1 bg-blue-100 text-blue-700 rounded">MT</span>
-                  : Melebihi Target
-                </p>
-              </div>
-              <div>
-                <p class="font-semibold mb-1">Keterangan Kehadiran:</p>
-                <p>
-                  <b>S</b> : Sakit | <b>I</b> : Izin | <b>A</b> : Alpha |
-                  <b>T</b> : Terlambat | <b>TS</b> : Tidak Setor
-                </p>
-              </div>
+            <div class="mt-6 text-xs text-slate-600">
+              <p class="font-semibold mb-1">Keterangan Verdict:</p>
+              <p>
+                <span class="px-1 bg-green-100 text-green-700 rounded"
+                  >Lulus</span
+                >
+                |
+                <span class="px-1 bg-red-100 text-red-700 rounded"
+                  >Tidak Lulus</span
+                >
+                |
+                <span class="px-1 bg-yellow-100 text-yellow-700 rounded"
+                  >Bersyarat</span
+                >
+              </p>
             </div>
 
             <!-- Footer -->
@@ -332,7 +299,6 @@ import { saveAs } from "file-saver";
 const loading = ref(false);
 const halaqahList = ref([]);
 const classesList = ref([]);
-const targets = ref([]);
 const report = ref(null);
 
 const reportContainer = ref(null);
@@ -385,14 +351,9 @@ const currentDate = new Date().toLocaleDateString("id-ID", {
   year: "numeric",
 });
 
-const targetPages = computed(() => {
-  // Use group's assigned target level
-  if (report.value?.halaqah?.targetLevel?.targetPages) {
-    return report.value.halaqah.targetLevel.targetPages;
-  }
-  // Use first target level for now - can be enhanced to use student's level
-  return targets.value[0]?.targetPages || 6;
-});
+const completedCount = computed(
+  () => report.value?.members?.filter((m) => m.hasExam).length || 0
+);
 
 async function loadHalaqahList() {
   try {
@@ -416,19 +377,7 @@ async function loadClasses() {
   }
 }
 
-async function loadTargets() {
-  try {
-    const res = await tahfidzApi.getTargets();
-    if (res.success) {
-      targets.value = res.data || [];
-    }
-  } catch (e) {
-    console.error("Failed to load targets:", e);
-  }
-}
-
 async function loadReport() {
-  // Only require halaqahId and dates - gender is optional
   if (!filters.halaqahId || !filters.startDate || !filters.endDate) return;
 
   loading.value = true;
@@ -444,7 +393,7 @@ async function loadReport() {
     if (filters.classId) {
       params.classId = filters.classId;
     }
-    const res = await tahfidzApi.getHalaqahReport(params);
+    const res = await tahfidzApi.getSertifikasiReport(params);
     if (res.success) {
       report.value = res.data;
     }
@@ -452,293 +401,8 @@ async function loadReport() {
     console.error("Failed to load report:", e);
   } finally {
     loading.value = false;
-    loading.value = false;
   }
 }
-
-async function exportToExcel() {
-  if (!report.value?.members.length) return;
-
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Laporan Hafalan");
-
-  // Columns Widths
-  worksheet.columns = [
-    { width: 5 }, // No (A)
-    { width: 30 }, // Nama (B)
-    { width: 12 }, // Kelas (C)
-    { width: 5 }, // S (D)
-    { width: 5 }, // I (E)
-    { width: 5 }, // A (F)
-    { width: 5 }, // T (G)
-    { width: 5 }, // TS (H)
-    { width: 10 }, // Target (I)
-    { width: 25 }, // Hafalan (J)
-    { width: 10 }, // Jumlah (K)
-    { width: 15 }, // Ket (L)
-  ];
-
-  // --- HEADER (TITLE & METADATA) ---
-  let currentRow = 1;
-
-  // Title
-  worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
-  const titleCell = worksheet.getCell(`A${currentRow}`);
-  titleCell.value = "LAPORAN BULANAN PENCAPAIAN HAFALAN SANTRI";
-  titleCell.font = { bold: true, size: 14 };
-  titleCell.alignment = { horizontal: "center", vertical: "middle" };
-  currentRow++;
-
-  worksheet.mergeCells(`A${currentRow}:L${currentRow}`);
-  const subTitleCell = worksheet.getCell(`A${currentRow}`);
-  subTitleCell.value = "PONDOK PESANTREN MINHAJUL HAQ PURWAKARTA";
-  subTitleCell.font = { bold: true, size: 12 };
-  subTitleCell.alignment = { horizontal: "center", vertical: "middle" };
-  currentRow += 2; // Gap
-
-  // Metadata
-  const addMetadata = (label, value) => {
-    const labelCell = worksheet.getCell(`A${currentRow}`);
-    labelCell.value = label;
-    labelCell.font = { bold: true };
-    const valueCell = worksheet.getCell(`C${currentRow}`); // Shift to C (Sejajar S)
-    valueCell.value = ": " + value;
-    valueCell.alignment = { horizontal: "left" };
-    currentRow++;
-  };
-
-  addMetadata("Grup Halaqah", report.value?.halaqah?.name || "-");
-  addMetadata("Pengampu", report.value?.mentor?.fullName || "-");
-
-  // Format Month Year
-  const date = new Date(filters.startDate);
-  const monthNames = [
-    "Januari",
-    "Februari",
-    "Maret",
-    "April",
-    "Mei",
-    "Juni",
-    "Juli",
-    "Agustus",
-    "September",
-    "Oktober",
-    "November",
-    "Desember",
-  ];
-  const monthStr = monthNames[date.getMonth()];
-  const yearStr = date.getFullYear();
-  addMetadata("Bulan", `${monthStr} ${yearStr}`);
-
-  currentRow++; // Gap
-
-  // --- TABLE HEADER ---
-
-  // Row 1 of Table Header
-  worksheet.mergeCells(`A${currentRow}:A${currentRow + 1}`);
-  worksheet.getCell(`A${currentRow}`).value = "No";
-
-  worksheet.mergeCells(`B${currentRow}:B${currentRow + 1}`);
-  worksheet.getCell(`B${currentRow}`).value = "Nama Lengkap";
-
-  worksheet.mergeCells(`C${currentRow}:C${currentRow + 1}`);
-  worksheet.getCell(`C${currentRow}`).value = "Kelas";
-
-  worksheet.mergeCells(`D${currentRow}:H${currentRow}`);
-  worksheet.getCell(`D${currentRow}`).value = "Kehadiran";
-
-  worksheet.mergeCells(`I${currentRow}:I${currentRow + 1}`);
-  worksheet.getCell(`I${currentRow}`).value = "Target";
-
-  worksheet.getCell(`J${currentRow}`).value = "Hafalan Bulan Ini";
-  worksheet.getCell(`J${currentRow + 1}`).value = "Rentang Halaman";
-
-  worksheet.mergeCells(`K${currentRow}:K${currentRow + 1}`);
-  worksheet.getCell(`K${currentRow}`).value = "Jumlah Halaman";
-
-  worksheet.mergeCells(`L${currentRow}:L${currentRow + 1}`);
-  worksheet.getCell(`L${currentRow}`).value = "Ket";
-
-  // Row 2 of Table Header (Subheaders)
-  worksheet.getCell(`D${currentRow + 1}`).value = "S";
-  worksheet.getCell(`E${currentRow + 1}`).value = "I";
-  worksheet.getCell(`F${currentRow + 1}`).value = "A";
-  worksheet.getCell(`G${currentRow + 1}`).value = "T";
-  worksheet.getCell(`H${currentRow + 1}`).value = "TS";
-
-  // Style Headers
-  const headerCells = [
-    `A${currentRow}`,
-    `B${currentRow}`,
-    `C${currentRow}`,
-    `D${currentRow}`,
-    `I${currentRow}`,
-    `J${currentRow}`,
-    `J${currentRow + 1}`,
-    `K${currentRow}`,
-    `L${currentRow}`,
-    `D${currentRow + 1}`,
-    `E${currentRow + 1}`,
-    `F${currentRow + 1}`,
-    `G${currentRow + 1}`,
-    `H${currentRow + 1}`,
-  ];
-
-  headerCells.forEach((key) => {
-    const cell = worksheet.getCell(key);
-    cell.font = { bold: true };
-    cell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFF1F5F9" }, // slate-100
-    };
-    cell.alignment = {
-      vertical: "middle",
-      horizontal: "center",
-      wrapText: true,
-    };
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" },
-    };
-  });
-
-  currentRow += 2;
-
-  // --- DATA ---
-  report.value.members.forEach((m, idx) => {
-    const rowValues = [
-      idx + 1,
-      m.fullName,
-      m.className || "-",
-      m.attendance?.sakit || 0,
-      m.attendance?.izin || 0,
-      m.attendance?.alpha || 0,
-      m.attendance?.terlambat || 0,
-      m.attendance?.tidakSetor || 0,
-      (targetPages.value || 0) + " Hal",
-      m.hafalanRanges || "-",
-      m.jumlahHalaman || 0,
-      getStatus(m.jumlahHalaman),
-    ];
-
-    const row = worksheet.getRow(currentRow);
-    row.values = rowValues;
-
-    // Style Data Row
-    row.eachCell((cell, colNumber) => {
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
-
-      // Alignment
-      if (colNumber === 2) {
-        // Nombre
-        cell.alignment = { vertical: "middle", horizontal: "left" };
-      } else {
-        cell.alignment = { vertical: "middle", horizontal: "center" };
-      }
-
-      // Color Status (Column L / 12)
-      if (colNumber === 12) {
-        const status = cell.value;
-        let argb = null;
-        if (status === "MT") argb = "FFDBEAFE"; // Blue
-        if (status === "ST") argb = "FFDCFCE7"; // Green
-        if (status === "DT") argb = "FFFEF9C3"; // Yellow
-
-        if (argb) {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb },
-          };
-        }
-      }
-    });
-
-    currentRow++;
-  });
-
-  currentRow++; // Gap
-
-  // --- LEGEND ---
-  const startRow = currentRow;
-  worksheet.getCell(`A${currentRow}`).value = "Keterangan Status:";
-  worksheet.getCell(`A${currentRow}`).font = { bold: true };
-  const legendStartRow = currentRow;
-  currentRow++;
-
-  const addLegend = (code, desc, argb) => {
-    const cellCode = worksheet.getCell(`A${currentRow}`);
-    cellCode.value = code;
-    cellCode.alignment = { horizontal: "center" };
-    cellCode.border = {
-      top: { style: "thin" },
-      bottom: { style: "thin" },
-      left: { style: "thin" },
-      right: { style: "thin" },
-    };
-    if (argb) {
-      cellCode.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
-    }
-
-    worksheet.getCell(`B${currentRow}`).value = ": " + desc;
-    currentRow++;
-  };
-
-  addLegend("ST", "Sesuai Target", "FFDCFCE7");
-  addLegend("DT", "Di Bawah Target", "FFFEF9C3");
-  addLegend("MT", "Melebihi Target", "FFDBEAFE");
-
-  currentRow++;
-  worksheet.getCell(`A${currentRow}`).value = "Keterangan Kehadiran:";
-  worksheet.getCell(`A${currentRow}`).font = { bold: true };
-  currentRow++;
-  worksheet.getCell(`A${currentRow}`).value =
-    "S : Sakit | I : Izin | A : Alpha | T : Terlambat | TS : Tidak Setor";
-
-  currentRow += 3; // Gap for signature
-
-  // --- SIGNATURE ---
-  // Right side (approx col H)
-  const signCol = "H";
-  let signRow = startRow;
-
-  worksheet.getCell(
-    `${signCol}${signRow}`
-  ).value = `Purwakarta, ${currentDate}`;
-  signRow++;
-  worksheet.getCell(`${signCol}${signRow}`).value = "Pengampu Halaqah,";
-  signRow += 5; // Space for sign
-
-  const mentorName = report.value?.mentor?.fullName || "____________________";
-  worksheet.getCell(`${signCol}${signRow}`).value = mentorName;
-  worksheet.getCell(`${signCol}${signRow}`).font = {
-    bold: true,
-  };
-
-  // Export
-  const buffer = await workbook.xlsx.writeBuffer();
-  const dateStr = new Date().toISOString().split("T")[0];
-  const fileName = `Laporan_Hafalan_${dateStr}.xlsx`;
-  saveAs(new Blob([buffer]), fileName);
-}
-
-// Auto-load when halaqahId changes (dates already have defaults)
-watch(
-  () => filters.halaqahId,
-  (newVal) => {
-    if (newVal && filters.startDate && filters.endDate) {
-      loadReport();
-    }
-  }
-);
 
 function formatDateRange() {
   const start = new Date(filters.startDate).toLocaleDateString("id-ID");
@@ -746,19 +410,22 @@ function formatDateRange() {
   return `${start} s.d. ${end}`;
 }
 
-function getStatus(pages) {
-  if (!pages || pages === 0) return "-";
-  if (pages >= targetPages.value) {
-    return pages > targetPages.value ? "MT" : "ST";
-  }
-  return "DT";
+function formatExamDate(dateStr) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleDateString("id-ID");
 }
 
-function getStatusClass(pages) {
-  const status = getStatus(pages);
-  if (status === "MT") return "bg-blue-100 text-blue-700";
-  if (status === "ST") return "bg-green-100 text-green-700";
-  if (status === "DT") return "bg-yellow-100 text-yellow-700";
+function getVerdictLabel(verdict) {
+  if (verdict === "pass") return "Lulus";
+  if (verdict === "fail") return "Tidak Lulus";
+  if (verdict === "conditional") return "Bersyarat";
+  return "-";
+}
+
+function getVerdictClass(verdict) {
+  if (verdict === "pass") return "bg-green-100 text-green-700";
+  if (verdict === "fail") return "bg-red-100 text-red-700";
+  if (verdict === "conditional") return "bg-yellow-100 text-yellow-700";
   return "bg-slate-100 text-slate-500";
 }
 
@@ -772,7 +439,6 @@ const { exportToPdf, pdfLoading } = usePdfExport();
 async function handleDownloadPdf() {
   if (!report.value || !report.value.members.length) return;
 
-  // Verify element exists
   const element = document.getElementById("print-area");
   if (!element) {
     alert("Halaman mading belum siap. Mohon tunggu sebentar.");
@@ -782,7 +448,7 @@ async function handleDownloadPdf() {
   try {
     await exportToPdf({
       selector: "#print-area",
-      filename: `Mading_Halaqah_${report.value.halaqah.name.replace(
+      filename: `Mading_Sertifikasi_${report.value.halaqah.name.replace(
         /\s+/g,
         "_"
       )}_${filters.startDate}.pdf`,
@@ -795,41 +461,149 @@ async function handleDownloadPdf() {
   }
 }
 
+async function exportToExcel() {
+  if (!report.value?.members.length) return;
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Sertifikasi");
+
+  worksheet.columns = [
+    { width: 5 }, // No
+    { width: 30 }, // Nama
+    { width: 12 }, // Kelas
+    { width: 10 }, // Status
+    { width: 15 }, // Tanggal Ujian
+    { width: 12 }, // Nilai Akhir
+    { width: 12 }, // Verdict
+  ];
+
+  let currentRow = 1;
+
+  worksheet.mergeCells(`A${currentRow}:G${currentRow}`);
+  const titleCell = worksheet.getCell(`A${currentRow}`);
+  titleCell.value = "LAPORAN STATUS UJIAN SERTIFIKASI SANTRI";
+  titleCell.font = { bold: true, size: 14 };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  currentRow++;
+
+  worksheet.mergeCells(`A${currentRow}:G${currentRow}`);
+  const subTitleCell = worksheet.getCell(`A${currentRow}`);
+  subTitleCell.value = "PONDOK PESANTREN MINHAJUL HAQ PURWAKARTA";
+  subTitleCell.font = { bold: true, size: 12 };
+  subTitleCell.alignment = { horizontal: "center", vertical: "middle" };
+  currentRow += 2;
+
+  const addMetadata = (label, value) => {
+    const labelCell = worksheet.getCell(`A${currentRow}`);
+    labelCell.value = label;
+    labelCell.font = { bold: true };
+    const valueCell = worksheet.getCell(`C${currentRow}`);
+    valueCell.value = ": " + value;
+    valueCell.alignment = { horizontal: "left" };
+    currentRow++;
+  };
+
+  addMetadata("Grup Halaqah", report.value?.halaqah?.name || "-");
+  addMetadata("Pengampu", report.value?.mentor?.fullName || "-");
+  addMetadata("Periode", formatDateRange());
+
+  currentRow++;
+
+  const headers = [
+    "No",
+    "Nama Lengkap",
+    "Kelas",
+    "Status",
+    "Tanggal Ujian",
+    "Nilai Akhir",
+    "Verdict",
+  ];
+  const headerRow = worksheet.getRow(currentRow);
+  headerRow.values = headers;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF1F5F9" },
+    };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+  currentRow++;
+
+  report.value.members.forEach((m, idx) => {
+    const rowValues = [
+      idx + 1,
+      m.fullName,
+      m.className || "-",
+      m.hasExam ? "Sudah" : "Belum",
+      formatExamDate(m.examDate),
+      m.finalScore ?? "-",
+      getVerdictLabel(m.verdict),
+    ];
+    const row = worksheet.getRow(currentRow);
+    row.values = rowValues;
+
+    row.eachCell((cell, colNumber) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: colNumber === 2 ? "left" : "center",
+      };
+
+      if (colNumber === 7) {
+        let argb = null;
+        if (m.verdict === "pass") argb = "FFDCFCE7";
+        if (m.verdict === "fail") argb = "FFFEE2E2";
+        if (m.verdict === "conditional") argb = "FFFEF9C3";
+        if (argb) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+        }
+      }
+    });
+
+    currentRow++;
+  });
+
+  currentRow += 2;
+
+  const signCol = "E";
+  let signRow = currentRow;
+  worksheet.getCell(`${signCol}${signRow}`).value = `Purwakarta, ${currentDate}`;
+  signRow++;
+  worksheet.getCell(`${signCol}${signRow}`).value = "Pengampu Halaqah,";
+  signRow += 5;
+  worksheet.getCell(`${signCol}${signRow}`).value =
+    report.value?.mentor?.fullName || "____________________";
+  worksheet.getCell(`${signCol}${signRow}`).font = { bold: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const dateStr = new Date().toISOString().split("T")[0];
+  saveAs(new Blob([buffer]), `Laporan_Sertifikasi_${dateStr}.xlsx`);
+}
+
+watch(
+  () => filters.halaqahId,
+  (newVal) => {
+    if (newVal && filters.startDate && filters.endDate) {
+      loadReport();
+    }
+  }
+);
+
 onMounted(() => {
   loadHalaqahList();
   loadClasses();
-  loadTargets();
 });
 </script>
-
-<style>
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 0;
-  }
-  body * {
-    visibility: hidden;
-  }
-  #print-area,
-  #print-area * {
-    visibility: visible;
-  }
-  #print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 210mm !important;
-    min-height: 297mm !important;
-    margin: 0 !important;
-    padding: 20px !important;
-    border: none !important;
-    box-shadow: none !important;
-    transform: none !important; /* Disable scaling */
-    overflow: visible !important;
-  }
-  .print\:hidden {
-    display: none !important;
-  }
-}
-</style>

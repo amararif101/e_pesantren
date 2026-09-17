@@ -1,19 +1,10 @@
 <template>
   <div class="p-2 max-w-7xl mx-auto pb-12">
     <!-- Header -->
-    <div
-      class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4"
-    >
-      <!-- <div>
-        <h1 class="text-2xl font-bold text-slate-800">Input Setoran Halaqah</h1>
-        <p class="text-slate-500">
-          Pilih tanggal untuk input setoran massal anggota halaqah
-        </p>
-      </div> -->
-
+    <div class="mb-6 grid grid-cols-1 md:grid-cols-[minmax(300px,1fr)_2fr] gap-6">
       <!-- Halaqah Selector (if multiple) - Simplified to just taking first active for now or mock -->
       <!-- Halaqah Selector -->
-      <div class="w-full md:w-64">
+      <div>
         <div v-if="myHalaqahs.length > 0" class="relative">
           <button
             @click="showHalaqahDropdown = !showHalaqahDropdown"
@@ -94,9 +85,9 @@
 
     <div class="grid grid-cols-1 md:grid-cols-[minmax(300px,1fr)_2fr] gap-6">
       <!-- Calendar Sidebar -->
-      <div>
+      <div class="sticky top-6 self-start">
         <div
-          class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm sticky top-6"
+          class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm"
           @touchstart="onTouchStart"
           @touchend="onTouchEnd"
           @wheel="onWheel"
@@ -209,6 +200,22 @@
             </div>
           </div>
         </div>
+
+        <!-- Health/Leave Summary (synced from Klinik & Kesantrian) -->
+        <div class="grid grid-cols-2 gap-4 mt-4">
+          <StatCard
+            icon="solar:health-line-duotone"
+            color="sky"
+            label="Santri Sakit (Klinik)"
+            :value="healthSummary.sickCount"
+          />
+          <StatCard
+            icon="solar:calendar-bold"
+            color="amber"
+            label="Izin Pulang (Kesantrian)"
+            :value="healthSummary.leaveCount"
+          />
+        </div>
       </div>
 
       <!-- Student List -->
@@ -295,7 +302,7 @@
               @click="
                 isMultiSelectMode
                   ? toggleStudentSelection(item)
-                  : openModal(item)
+                  : openModal(item, false, defaultOpenType(item))
               "
             >
               <div class="flex items-center gap-3 md:gap-4 overflow-hidden">
@@ -336,45 +343,69 @@
                     {{ item.student.name }}
                   </h4>
                   <p
-                    v-if="item.status === 'done'"
-                    class="text-xs md:text-sm text-emerald-600 font-medium truncate"
-                  >
-                    <span
-                      v-if="item.deposit.startSurah === item.deposit.endSurah"
-                    >
-                      {{ getSurahName(item.deposit.startSurah) }}:
-                      {{ item.deposit.startAyat }}-{{ item.deposit.endAyat }}
-                    </span>
-                    <span v-else>
-                      {{ getSurahName(item.deposit.startSurah) }}:{{
-                        item.deposit.startAyat
-                      }}
-                      - {{ getSurahName(item.deposit.endSurah) }}:{{
-                        item.deposit.endAyat
-                      }}
-                    </span>
-                  </p>
-                  <p
-                    v-else-if="item.status === 'izin'"
+                    v-if="item.status === 'izin'"
                     class="text-xs md:text-sm text-yellow-600 font-medium truncate"
                   >
-                    {{ item.deposit.notes || "Izin" }}
+                    {{ getDepositByType(item, "izin")?.notes || "Izin" }}
                   </p>
                   <p
                     v-else-if="item.status === 'sakit'"
                     class="text-xs md:text-sm text-sky-600 font-medium truncate"
                   >
-                    {{ item.deposit.notes || "Sakit" }}
+                    {{ getDepositByType(item, "sakit")?.notes || "Sakit" }}
                   </p>
                   <p
                     v-else-if="item.status === 'alpha'"
                     class="text-xs md:text-sm text-rose-600 font-medium truncate"
                   >
-                    {{ item.deposit.notes || "Alpha" }}
+                    {{ getDepositByType(item, "alpha")?.notes || "Alpha" }}
                   </p>
-                  <p v-else class="text-xs text-slate-400 truncate">
-                    Klik untuk input
+                  <p
+                    v-else-if="item.status === 'tidak_setor'"
+                    class="text-xs md:text-sm text-orange-600 font-medium truncate"
+                  >
+                    {{
+                      getDepositByType(item, "tidak_setor")?.notes ||
+                      "Tidak Setor"
+                    }}
                   </p>
+                  <!-- Taqdim, Sabqi, Manzil are independent per day -->
+                  <div v-else class="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <button
+                      v-if="item.juzBlock?.blocked"
+                      type="button"
+                      @click.stop="showJuzBlockNotice(item)"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
+                      title="Belum bisa Taqdim - perlu UKJ dulu"
+                    >
+                      ⚠ Perlu UKJ Juz {{ item.juzBlock.completedJuz }}
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      @click.stop="openModal(item, false, 'ziyadah')"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      :class="taqdimPillClass(item)"
+                    >
+                      {{ pillLabel(item, "ziyadah") }}
+                    </button>
+                    <button
+                      type="button"
+                      @click.stop="openModal(item, false, 'sabqi')"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      :class="sabqiManzilPillClass(item, 'sabqi')"
+                    >
+                      {{ pillLabel(item, "sabqi") }}
+                    </button>
+                    <button
+                      type="button"
+                      @click.stop="openModal(item, false, 'manzil')"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      :class="sabqiManzilPillClass(item, 'manzil')"
+                    >
+                      {{ pillLabel(item, "manzil") }}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -411,7 +442,9 @@
               </span>
               <span v-else>
                 {{
-                  selectedStudent?.deposit ? "Edit Setoran" : "Input Setoran"
+                  selectedStudent && getDepositByType(selectedStudent, form.type)
+                    ? "Edit Setoran"
+                    : "Input Setoran"
                 }}: {{ selectedStudent?.student.name }}
               </span>
             </h3>
@@ -442,20 +475,16 @@
                     v-model="form.type"
                     class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 ring-primary/20"
                   >
-                    <option value="ziyadah">Ziyadah</option>
-                    <option value="murajaah">Muraja'ah</option>
+                    <option value="ziyadah">Taqdim</option>
+                    <option value="sabqi">Sabqi</option>
+                    <option value="manzil">Manzil</option>
                     <option value="izin">Izin</option>
                     <option value="alpha">Alpha / Tanpa Keterangan</option>
                     <option value="sakit">Sakit</option>
+                    <option value="tidak_setor">Tidak Setor</option>
                   </select>
                 </div>
-                <div
-                  v-if="
-                    form.type !== 'izin' &&
-                    form.type !== 'alpha' &&
-                    form.type !== 'sakit'
-                  "
-                >
+                <div v-if="showFullDepositForm">
                   <label class="block text-sm font-medium text-slate-700 mb-1"
                     >Kelancaran</label
                   >
@@ -463,22 +492,28 @@
                     v-model="form.fluency"
                     class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 ring-primary/20"
                   >
-                    <option value="lancar">Lancar (Mumtaz)</option>
-                    <option value="kurang_lancar">
-                      Kurang Lancar (Jayyid)
-                    </option>
-                    <option value="mengulang">Mengulang (Rasib)</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
+                </div>
+                <div v-if="showSabqiManzilToggle">
+                  <label class="block text-sm font-medium text-slate-700 mb-1"
+                    >Status</label
+                  >
+                  <select
+                    v-model="form.isCompleted"
+                    class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 ring-primary/20"
+                  >
+                    <option :value="true">Sudah</option>
+                    <option :value="false">Belum</option>
                   </select>
                 </div>
               </div>
 
-              <!-- Posisi Mulai (Dari) - Only for deposit types -->
+              <!-- Posisi Mulai (Dari) - Only for Taqdim -->
               <div
-                v-if="
-                  form.type !== 'izin' &&
-                  form.type !== 'alpha' &&
-                  form.type !== 'sakit'
-                "
+                v-if="showFullDepositForm"
                 class="p-3 bg-slate-50 rounded-lg"
               >
                 <h4 class="text-sm font-semibold text-slate-700 mb-3">
@@ -545,11 +580,7 @@
 
               <!-- Posisi Akhir (Sampai) -->
               <div
-                v-if="
-                  form.type !== 'izin' &&
-                  form.type !== 'alpha' &&
-                  form.type !== 'sakit'
-                "
+                v-if="showFullDepositForm"
                 class="p-3 bg-slate-50 rounded-lg"
               >
                 <h4 class="text-sm font-semibold text-slate-700 mb-3">
@@ -616,12 +647,7 @@
 
               <!-- Ringkasan Kalkulasi -->
               <div
-                v-if="
-                  calculatedResult &&
-                  form.type !== 'izin' &&
-                  form.type !== 'alpha' &&
-                  form.type !== 'sakit'
-                "
+                v-if="calculatedResult && showFullDepositForm"
                 class="p-3 bg-amber-50 border border-amber-200 rounded-lg"
               >
                 <h4 class="text-sm font-semibold text-amber-800 mb-2">
@@ -662,11 +688,7 @@
 
               <div
                 class="flex items-center gap-2 pt-2"
-                v-if="
-                  form.type !== 'izin' &&
-                  form.type !== 'alpha' &&
-                  form.type !== 'sakit'
-                "
+                v-if="!isAttendanceOnlyType"
               >
                 <input
                   type="checkbox"
@@ -697,7 +719,8 @@
                   {{
                     saving
                       ? "Menyimpan..."
-                      : selectedStudent?.deposit
+                      : selectedStudent &&
+                          getDepositByType(selectedStudent, form.type)
                         ? "Update Setoran"
                         : "Simpan Setoran"
                   }}
@@ -775,6 +798,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";
 import { tahfidzApi, halaqahApi, authApi, quranApi, teachersApi } from "@/services/api";
@@ -797,6 +821,11 @@ const statusModalMessage = ref("");
 // Bulk Confirm Modal State
 const showBulkConfirm = ref(false);
 
+// Whether the current user may submit/edit setoran for a date before today
+// (admin or Divisi Tahfidz head/member); defaults to true while loading so
+// authorized users aren't blocked by the async check, backend still enforces it
+const canBackdate = ref(true);
+
 // Calendar State
 const now = new Date();
 const currentMonth = ref(now.getMonth());
@@ -808,7 +837,7 @@ const showModal = ref(false);
 const selectedStudent = ref(null);
 const form = reactive({
   type: "ziyadah",
-  fluency: "lancar",
+  fluency: "A",
   // New line-based fields
   startSurah: "",
   startAyat: "",
@@ -821,6 +850,7 @@ const form = reactive({
   totalPages: "",
   notes: "",
   isLate: false,
+  isCompleted: null,
 });
 
 // Quran data
@@ -835,6 +865,16 @@ const showStartSurahDropdown = ref(false);
 const showEndSurahDropdown = ref(false);
 const filteredStartSurahs = ref([]);
 const filteredEndSurahs = ref([]);
+
+// Jenis grouping: Taqdim pakai form lengkap, Sabqi/Manzil cuma Sudah/Belum,
+// Izin/Alpha/Sakit/Tidak Setor tanpa field posisi hafalan
+const isAttendanceOnlyType = computed(() =>
+  ["izin", "alpha", "sakit", "tidak_setor"].includes(form.type),
+);
+const showFullDepositForm = computed(() => form.type === "ziyadah");
+const showSabqiManzilToggle = computed(
+  () => form.type === "sabqi" || form.type === "manzil",
+);
 
 // Computed for surah info
 const startSurahInfo = computed(() => {
@@ -934,6 +974,7 @@ function getStatusColor(status) {
   if (status === "izin") return "border-yellow-200 bg-yellow-50";
   if (status === "alpha") return "border-rose-200 bg-rose-50";
   if (status === "sakit") return "border-sky-200 bg-sky-50";
+  if (status === "tidak_setor") return "border-orange-200 bg-orange-50";
   return "border-slate-100 mobile:bg-white";
 }
 
@@ -942,7 +983,53 @@ function getStatusDot(status) {
   if (status === "izin") return "bg-yellow-400";
   if (status === "alpha") return "bg-rose-500";
   if (status === "sick" || status === "sakit") return "bg-sky-400";
+  if (status === "tidak_setor") return "bg-orange-500";
   return "bg-slate-300"; // Belum
+}
+
+// Taqdim, Sabqi, and Manzil are tracked independently per student per day.
+function getDepositByType(item, type) {
+  return (item.deposits || []).find((d) => d.type === type) || null;
+}
+
+function defaultOpenType(item) {
+  if (["izin", "alpha", "sakit", "tidak_setor"].includes(item.status)) {
+    return item.status;
+  }
+  return "ziyadah";
+}
+
+function taqdimPillClass(item) {
+  return getDepositByType(item, "ziyadah")
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-slate-100 text-slate-400";
+}
+
+function sabqiManzilPillClass(item, type) {
+  const deposit = getDepositByType(item, type);
+  if (!deposit) return "bg-slate-100 text-slate-400";
+  const colors =
+    type === "sabqi"
+      ? { sudah: "bg-teal-100 text-teal-700", belum: "bg-teal-50 text-teal-500" }
+      : {
+          sudah: "bg-indigo-100 text-indigo-700",
+          belum: "bg-indigo-50 text-indigo-500",
+        };
+  return deposit.isCompleted ? colors.sudah : colors.belum;
+}
+
+function pillLabel(item, type) {
+  if (type === "ziyadah") return "Taqdim";
+  const label = type === "sabqi" ? "Sabqi" : "Manzil";
+  const deposit = getDepositByType(item, type);
+  return deposit ? `${label}: ${deposit.isCompleted ? "Sudah" : "Belum"}` : label;
+}
+
+function showJuzBlockNotice(item) {
+  statusModalType.value = "failed";
+  statusModalTitle.value = "Perlu Ujian Kenaikan Juz (UKJ)";
+  statusModalMessage.value = `${item.student.name} sudah menyelesaikan Juz ${item.juzBlock.completedJuz}. Santri ini harus mengikuti dan lulus UKJ untuk Juz ${item.juzBlock.completedJuz} sebelum bisa melanjutkan setoran Taqdim.`;
+  showStatusModal.value = true;
 }
 
 function getStatusText(status) {
@@ -1013,6 +1100,7 @@ function getDayProgress(day) {
 const loadingHalaqah = ref(false);
 const errorMessage = ref("");
 const monthlyStats = ref({ data: {}, totalStudents: 0 }); // { date: count }
+const healthSummary = ref({ sickCount: 0, leaveCount: 0 });
 
 async function loadMonthlyStats() {
   if (!selectedHalaqahId.value) return;
@@ -1027,6 +1115,19 @@ async function loadMonthlyStats() {
     }
   } catch (e) {
     console.error("Load Monthly Stats Error:", e);
+  }
+
+  try {
+    const healthRes = await tahfidzApi.getHalaqahHealthSummary(
+      selectedHalaqahId.value,
+      currentMonth.value + 1,
+      currentYear.value,
+    );
+    if (healthRes.success) {
+      healthSummary.value = healthRes.data;
+    }
+  } catch (e) {
+    console.error("Load Health Summary Error:", e);
   }
 }
 
@@ -1295,7 +1396,14 @@ async function calculateDeposit() {
 
 // --- Modal Functions
 // Open Modal
-async function openModal(item, bulk = false) {
+async function openModal(item, bulk = false, presetType = null) {
+  // Taqdim is blocked once the student has finished a juz until they pass
+  // the UKJ exam for it (also enforced server-side).
+  if (!bulk && presetType === "ziyadah" && item?.juzBlock?.blocked) {
+    showJuzBlockNotice(item);
+    return;
+  }
+
   isBulkInput.value = bulk;
   if (bulk) {
     selectedStudent.value = null; // No single student context
@@ -1307,8 +1415,8 @@ async function openModal(item, bulk = false) {
   await loadSurahs();
 
   // Reset form
-  form.type = "ziyadah";
-  form.fluency = "lancar";
+  form.type = presetType || "ziyadah";
+  form.fluency = "A";
   form.startSurah = "";
   form.startAyat = "";
   form.startPage = "";
@@ -1319,6 +1427,7 @@ async function openModal(item, bulk = false) {
   form.totalPages = "";
   form.notes = "";
   form.isLate = false;
+  form.isCompleted = null;
 
   // Reset search
   startSurahSearch.value = "";
@@ -1330,23 +1439,33 @@ async function openModal(item, bulk = false) {
   calculatedResult.value = null;
   errorMessage.value = "";
 
-  // Pre-fill if not bulk and student has existing deposit (edit mode)
-  if (!bulk && item.deposit) {
-    form.type = item.deposit.type;
-    form.fluency = item.deposit.fluency || "lancar";
-    form.notes = item.deposit.notes || "";
+  // Pre-fill if not bulk and student already has a deposit of this type
+  // for the day (edit mode). Taqdim, Sabqi, and Manzil are independent, so
+  // look up the specific type rather than assuming a single deposit per day.
+  const existingDeposit = !bulk
+    ? (item.deposits || []).find((d) => d.type === form.type)
+    : null;
+  if (existingDeposit) {
+    form.type = existingDeposit.type;
+    form.fluency = existingDeposit.fluency || "A";
+    form.notes = existingDeposit.notes || "";
+    form.isLate = existingDeposit.isLate || false;
+    form.isCompleted =
+      existingDeposit.isCompleted === undefined
+        ? null
+        : existingDeposit.isCompleted;
     // If we have new fields, populate them
-    if (item.deposit.startSurah) {
-      form.startSurah = item.deposit.startSurah;
-      form.startAyat = item.deposit.startAyat;
-      form.endSurah = item.deposit.endSurah;
-      form.endAyat = item.deposit.endAyat;
+    if (existingDeposit.startSurah) {
+      form.startSurah = existingDeposit.startSurah;
+      form.startAyat = existingDeposit.startAyat;
+      form.endSurah = existingDeposit.endSurah;
+      form.endAyat = existingDeposit.endAyat;
       // Find surah name for display
       const startS = surahList.value.find(
-        (s) => s.sora === item.deposit.startSurah,
+        (s) => s.sora === existingDeposit.startSurah,
       );
       const endS = surahList.value.find(
-        (s) => s.sora === item.deposit.endSurah,
+        (s) => s.sora === existingDeposit.endSurah,
       );
       if (startS)
         startSurahSearch.value = `${startS.sora}. ${startS.sora_name_ar}`;
@@ -1367,15 +1486,20 @@ function closeModal() {
 
 async function submitDeposit() {
   // Validate
-  if (
-    form.type !== "izin" &&
-    form.type !== "alpha" &&
-    form.type !== "sakit" &&
-    !calculatedResult.value
-  ) {
+  if (showFullDepositForm.value && !calculatedResult.value) {
     statusModalType.value = "failed";
     statusModalTitle.value = "Validasi Gagal";
     statusModalMessage.value = "Mohon lengkapi data hafalan";
+    showStatusModal.value = true;
+    return;
+  }
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  if (selectedDate.value < todayStr && !canBackdate.value) {
+    statusModalType.value = "failed";
+    statusModalTitle.value = "Tidak Diizinkan";
+    statusModalMessage.value =
+      "Pengampu halaqoh hanya dapat menginput setoran untuk hari ini. Input untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.";
     showStatusModal.value = true;
     return;
   }
@@ -1397,8 +1521,8 @@ async function processBulkDelete() {
   try {
     const idsToDelete = [];
     students.value.forEach((s) => {
-      if (selectedStudentIds.value.has(s.student.id) && s.deposit) {
-        idsToDelete.push(s.deposit.id);
+      if (selectedStudentIds.value.has(s.student.id)) {
+        (s.deposits || []).forEach((d) => idsToDelete.push(d.id));
       }
     });
 
@@ -1496,36 +1620,41 @@ async function processDepositSubmission() {
     }
 
     // Process each student
+    const juzCompletedNotices = [];
     for (const studentItem of studentsToProcess) {
-      const isDepositType =
-        form.type !== "izin" && form.type !== "alpha" && form.type !== "sakit";
+      const isFullDeposit = form.type === "ziyadah";
+      const isAttendanceOnly = ["izin", "alpha", "sakit", "tidak_setor"].includes(
+        form.type,
+      );
+      const isSabqiManzil = form.type === "sabqi" || form.type === "manzil";
 
       const payload = {
         studentId: studentItem.student.id,
         teacherId,
         halaqahId: selectedHalaqahId.value,
         type: form.type,
-        fluency: isDepositType ? form.fluency : undefined,
-        isLate: isDepositType ? form.isLate || false : false,
+        fluency: isFullDeposit ? form.fluency : undefined,
+        isLate: !isAttendanceOnly ? form.isLate || false : false,
+        isCompleted: isSabqiManzil ? form.isCompleted : null,
         depositDate: selectedDate.value,
         notes: form.notes || undefined,
-        // New line-based fields (Clear if not deposit)
+        // New line-based fields (Clear if not full deposit)
         startSurah:
-          isDepositType && form.startSurah ? Number(form.startSurah) : null,
+          isFullDeposit && form.startSurah ? Number(form.startSurah) : null,
         startAyat:
-          isDepositType && form.startAyat ? Number(form.startAyat) : null,
+          isFullDeposit && form.startAyat ? Number(form.startAyat) : null,
         startPage:
-          isDepositType && form.startPage ? Number(form.startPage) : null,
-        endSurah: isDepositType && form.endSurah ? Number(form.endSurah) : null,
-        endAyat: isDepositType && form.endAyat ? Number(form.endAyat) : null,
-        endPage: isDepositType && form.endPage ? Number(form.endPage) : null,
+          isFullDeposit && form.startPage ? Number(form.startPage) : null,
+        endSurah: isFullDeposit && form.endSurah ? Number(form.endSurah) : null,
+        endAyat: isFullDeposit && form.endAyat ? Number(form.endAyat) : null,
+        endPage: isFullDeposit && form.endPage ? Number(form.endPage) : null,
         totalLines:
-          isDepositType && form.totalLines ? Number(form.totalLines) : null,
+          isFullDeposit && form.totalLines ? Number(form.totalLines) : null,
         totalPages:
-          isDepositType && form.totalPages ? Number(form.totalPages) : null,
+          isFullDeposit && form.totalPages ? Number(form.totalPages) : null,
         // Fix: Add juz field for report
         juz:
-          isDepositType &&
+          isFullDeposit &&
           calculatedResult.value &&
           calculatedResult.value.juzList &&
           calculatedResult.value.juzList.length > 0
@@ -1533,10 +1662,20 @@ async function processDepositSubmission() {
             : null,
       };
 
-      if (studentItem.deposit && studentItem.deposit.id) {
-        await tahfidzApi.updateDeposit(studentItem.deposit.id, payload);
+      const existingDeposit = (studentItem.deposits || []).find(
+        (d) => d.type === form.type,
+      );
+      let res;
+      if (existingDeposit && existingDeposit.id) {
+        res = await tahfidzApi.updateDeposit(existingDeposit.id, payload);
       } else {
-        await tahfidzApi.createDeposit(payload);
+        res = await tahfidzApi.createDeposit(payload);
+      }
+      if (res?.juzCompleted) {
+        juzCompletedNotices.push({
+          name: studentItem.student.name,
+          juz: res.juzCompleted,
+        });
       }
     }
 
@@ -1547,8 +1686,20 @@ async function processDepositSubmission() {
 
     // Show successes
     statusModalType.value = "success";
-    statusModalTitle.value = "Berhasil";
-    statusModalMessage.value = "Data setoran berhasil disimpan.";
+    if (juzCompletedNotices.length > 0) {
+      statusModalTitle.value = "Berhasil - Juz Selesai!";
+      statusModalMessage.value =
+        "Data setoran berhasil disimpan. " +
+        juzCompletedNotices
+          .map(
+            (n) =>
+              `${n.name} telah menyelesaikan Juz ${n.juz} - wajib mengikuti UKJ sebelum lanjut Taqdim.`,
+          )
+          .join(" ");
+    } else {
+      statusModalTitle.value = "Berhasil";
+      statusModalMessage.value = "Data setoran berhasil disimpan.";
+    }
     showStatusModal.value = true;
 
     // Clear selection if bulk
@@ -1577,8 +1728,20 @@ function getPhotoUrl(path) {
   return path;
 }
 
+async function loadCanBackdate() {
+  try {
+    const res = await tahfidzApi.canBackdate();
+    if (res.success) {
+      canBackdate.value = !!res.data?.allowed;
+    }
+  } catch (e) {
+    console.error("Failed to load backdate permission:", e);
+  }
+}
+
 onMounted(() => {
   loadInitial();
+  loadCanBackdate();
 });
 </script>
 

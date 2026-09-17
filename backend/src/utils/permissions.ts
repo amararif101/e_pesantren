@@ -16,6 +16,11 @@ export function getDefaultPermission(role: string, routePath: string): boolean {
   // Analytics are strictly admin-only
   if (routePath.startsWith("/analytics")) return false;
 
+  // Tahfidz monitoring dashboard is admin-only by default; division heads,
+  // management, or anyone else who needs it must be granted access
+  // explicitly via Security > Roles.
+  if (routePath === "/apps/tahfidz/monitoring") return false;
+
   // Teacher permissions
   if (role === "teacher") {
     // Teachers have access to all app features except admin settings, analytics, and managing all savings

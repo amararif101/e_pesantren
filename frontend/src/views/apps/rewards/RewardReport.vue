@@ -23,66 +23,30 @@
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      <div
-        class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:medal-star-bold" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500">Total Penghargaan</div>
-          <div class="text-2xl font-bold text-slate-800">
-            {{ totalRewards }}
-          </div>
-        </div>
-      </div>
-      <div
-        class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:danger-circle-bold" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500">Total Pelanggaran</div>
-          <div class="text-2xl font-bold text-slate-800">
-            {{ totalPunishments }}
-          </div>
-        </div>
-      </div>
-      <div
-        class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:shield-warning-bold" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500">Total SP</div>
-          <div class="text-2xl font-bold text-slate-800">
-            {{ totalSP }}
-          </div>
-        </div>
-      </div>
-      <div
-        class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:users-group-rounded-bold" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500">Santri Terlibat</div>
-          <div class="text-2xl font-bold text-slate-800">
-            {{ uniqueStudents }}
-          </div>
-        </div>
-      </div>
+      <StatCard
+        icon="solar:medal-star-bold"
+        color="green"
+        label="Total Penghargaan"
+        :value="totalRewards"
+      />
+      <StatCard
+        icon="solar:danger-circle-bold"
+        color="red"
+        label="Total Pelanggaran"
+        :value="totalPunishments"
+      />
+      <StatCard
+        icon="solar:shield-warning-bold"
+        color="orange"
+        label="Total SP"
+        :value="totalSP"
+      />
+      <StatCard
+        icon="solar:users-group-rounded-bold"
+        color="blue"
+        label="Santri Terlibat"
+        :value="uniqueStudents"
+      />
     </div>
 
     <!-- Tabs -->
@@ -444,6 +408,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import { rewardsApi, warningsApi, studentsApi, rulesApi } from "@/services/api";
 import DataTable from "@/components/ui/DataTable.vue";
 import RewardPunishmentForm from "@/components/domain/rewards/RewardPunishmentForm.vue";

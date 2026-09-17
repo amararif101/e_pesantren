@@ -1764,6 +1764,13 @@ export const tahfidzApi = {
       method: "DELETE",
     });
   },
+  async canBackdate() {
+    return request("/api/tahfidz/can-backdate");
+  },
+  async getMonitoringDashboard(date) {
+    const query = date ? `?date=${date}` : "";
+    return request(`/api/tahfidz/monitoring-dashboard${query}`);
+  },
   async getExams(params = {}) {
     const cleanParams = Object.fromEntries(
       Object.entries(params).filter(
@@ -1790,6 +1797,12 @@ export const tahfidzApi = {
       method: "DELETE",
     });
   },
+  async getCapaianTarget(studentId, examDate, maxScore) {
+    const maxScoreParam = maxScore ? `&maxScore=${maxScore}` : "";
+    return request(
+      `/api/tahfidz/capaian-target/${studentId}?examDate=${examDate}${maxScoreParam}`
+    );
+  },
   async getHalaqahDailySummary(groupId, date) {
     return request(
       `/api/tahfidz/halaqah/${groupId}/daily-summary?date=${date}`
@@ -1800,10 +1813,19 @@ export const tahfidzApi = {
       `/api/tahfidz/halaqah/${groupId}/monthly-summary?month=${month}&year=${year}`
     );
   },
+  async getHalaqahHealthSummary(groupId, month, year) {
+    return request(
+      `/api/tahfidz/halaqah/${groupId}/health-summary?month=${month}&year=${year}`
+    );
+  },
   // Halaqah Report (Mading)
   async getHalaqahReport(params) {
     const query = new URLSearchParams(params).toString();
     return request(`/api/tahfidz/halaqah-report?${query}`);
+  },
+  async getSertifikasiReport(params) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/sertifikasi-report?${query}`);
   },
   // Target Settings
   async getTargets() {

@@ -685,8 +685,13 @@
                         class="text-xs font-bold px-2 py-0.5 rounded uppercase"
                         :class="{
                           'bg-blue-100 text-blue-700': item.type === 'ziyadah',
+                          'bg-teal-100 text-teal-700': item.type === 'sabqi',
+                          'bg-indigo-100 text-indigo-700':
+                            item.type === 'manzil',
                           'bg-purple-100 text-purple-700':
                             item.type === 'murajaah',
+                          'bg-orange-100 text-orange-700':
+                            item.type === 'tidak_setor',
                           'bg-gray-200 text-gray-700': [
                             'izin',
                             'sakit',
@@ -694,7 +699,13 @@
                           ].includes(item.type),
                         }"
                       >
-                        {{ item.type || "Mutabaah" }}
+                        {{
+                          item.type === "ziyadah"
+                            ? "Taqdim"
+                            : item.type === "tidak_setor"
+                              ? "Tidak Setor"
+                              : item.type || "Mutabaah"
+                        }}
                       </span>
                       <span
                         v-if="item.juz"
@@ -725,8 +736,15 @@
                           >
                         </span>
                         <span
+                          v-else-if="item.type === 'sabqi' || item.type === 'manzil'"
+                        >
+                          {{ item.isCompleted ? "Sudah" : "Belum" }}
+                        </span>
+                        <span
                           v-else-if="
-                            !['izin', 'sakit', 'alpha'].includes(item.type)
+                            !['izin', 'sakit', 'alpha', 'tidak_setor'].includes(
+                              item.type,
+                            )
                           "
                         >
                           -
@@ -750,7 +768,11 @@
                         >
                       </div>
                       <span
-                        v-if="['izin', 'sakit', 'alpha'].includes(item.type)"
+                        v-if="
+                          ['izin', 'sakit', 'alpha', 'tidak_setor'].includes(
+                            item.type,
+                          )
+                        "
                         class="text-xs"
                       >
                         Keterangan: {{ item.notes || "-" }}
@@ -760,24 +782,25 @@
                   <div class="flex gap-4">
                     <div
                       class="text-center"
-                      v-if="!['izin', 'sakit', 'alpha'].includes(item.type)"
+                      v-if="
+                        !['izin', 'sakit', 'alpha', 'sabqi', 'manzil', 'tidak_setor'].includes(
+                          item.type,
+                        )
+                      "
                     >
                       <p class="text-xs text-slate-400 mb-1">Kelancaran</p>
                       <span
                         class="font-bold px-3 py-1 rounded-lg text-xs uppercase"
                         :class="{
                           'bg-emerald-100 text-emerald-600':
-                            item.fluency === 'lancar',
+                            item.fluency === 'A',
                           'bg-orange-100 text-orange-600':
-                            item.fluency === 'kurang_lancar',
-                          'bg-rose-100 text-rose-600':
-                            item.fluency === 'mengulang',
+                            item.fluency === 'B',
+                          'bg-rose-100 text-rose-600': item.fluency === 'C',
                           'bg-slate-100 text-slate-500': !item.fluency,
                         }"
                       >
-                        {{
-                          item.fluency ? item.fluency.replace("_", " ") : "-"
-                        }}
+                        {{ item.fluency || "-" }}
                       </span>
                     </div>
                     <div class="text-right">

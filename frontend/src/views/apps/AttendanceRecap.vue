@@ -30,50 +30,30 @@
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-emerald-100 rounded-lg">
-            <Icon icon="lucide:user-check" class="w-5 h-5 text-emerald-600" />
-          </div>
-          <div>
-            <p class="text-2xl font-bold text-slate-900">{{ stats.present }}</p>
-            <p class="text-xs text-slate-500">Hadir</p>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-amber-100 rounded-lg">
-            <Icon icon="lucide:clock" class="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <p class="text-2xl font-bold text-slate-900">{{ stats.late }}</p>
-            <p class="text-xs text-slate-500">Terlambat</p>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-rose-100 rounded-lg">
-            <Icon icon="lucide:user-x" class="w-5 h-5 text-rose-600" />
-          </div>
-          <div>
-            <p class="text-2xl font-bold text-slate-900">{{ stats.absent }}</p>
-            <p class="text-xs text-slate-500">Tidak Hadir</p>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-indigo-100 rounded-lg">
-            <Icon icon="lucide:users" class="w-5 h-5 text-indigo-600" />
-          </div>
-          <div>
-            <p class="text-2xl font-bold text-slate-900">{{ stats.total }}</p>
-            <p class="text-xs text-slate-500">Total Record</p>
-          </div>
-        </div>
-      </div>
+      <StatCard
+        icon="lucide:user-check"
+        color="emerald"
+        label="Hadir"
+        :value="stats.present"
+      />
+      <StatCard
+        icon="lucide:clock"
+        color="amber"
+        label="Terlambat"
+        :value="stats.late"
+      />
+      <StatCard
+        icon="lucide:user-x"
+        color="rose"
+        label="Tidak Hadir"
+        :value="stats.absent"
+      />
+      <StatCard
+        icon="lucide:users"
+        color="indigo"
+        label="Total Record"
+        :value="stats.total"
+      />
     </div>
 
     <!-- Data Table -->
@@ -171,6 +151,7 @@
 <script setup>
 import { ref, onMounted, computed } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import { attendanceApi, teachersApi } from "@/services/api.js";
 
 const attendances = ref([]);

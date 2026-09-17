@@ -23,67 +23,30 @@
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <!-- Patients Today -->
-      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div class="flex items-center gap-3 mb-2">
-          <div
-            class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"
-          >
-            <Icon icon="solar:user-plus-bold-duotone" class="text-xl" />
-          </div>
-          <span class="text-slate-500 text-sm font-medium"
-            >Pasien Hari Ini</span
-          >
-        </div>
-        <div class="text-2xl font-bold text-slate-800">
-          {{ stats.todayPatients }}
-        </div>
-      </div>
-
-      <!-- Active Inpatients -->
-      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div class="flex items-center gap-3 mb-2">
-          <div
-            class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center"
-          >
-            <Icon icon="solar:bed-bold-duotone" class="text-xl" />
-          </div>
-          <span class="text-slate-500 text-sm font-medium">Rawat Inap</span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800">
-          {{ stats.activeInpatients }}
-        </div>
-      </div>
-
-      <!-- Low Stock Medicines -->
-      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div class="flex items-center gap-3 mb-2">
-          <div
-            class="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center"
-          >
-            <Icon icon="solar:pill-bold-duotone" class="text-xl" />
-          </div>
-          <span class="text-slate-500 text-sm font-medium">Stok Menipis</span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800">
-          {{ stats.lowStockMedicines }}
-        </div>
-      </div>
-
-      <!-- Total Medicines -->
-      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div class="flex items-center gap-3 mb-2">
-          <div
-            class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center"
-          >
-            <Icon icon="solar:medical-kit-bold-duotone" class="text-xl" />
-          </div>
-          <span class="text-slate-500 text-sm font-medium">Total Obat</span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800">
-          {{ stats.totalMedicines }}
-        </div>
-      </div>
+      <StatCard
+        icon="solar:user-plus-bold-duotone"
+        color="blue"
+        label="Pasien Hari Ini"
+        :value="stats.todayPatients"
+      />
+      <StatCard
+        icon="solar:bed-bold-duotone"
+        color="amber"
+        label="Rawat Inap"
+        :value="stats.activeInpatients"
+      />
+      <StatCard
+        icon="solar:pill-bold-duotone"
+        color="red"
+        label="Stok Menipis"
+        :value="stats.lowStockMedicines"
+      />
+      <StatCard
+        icon="solar:medical-kit-bold-duotone"
+        color="emerald"
+        label="Total Obat"
+        :value="stats.totalMedicines"
+      />
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -878,6 +841,7 @@
 <script setup>
 import { ref, onMounted, computed, reactive } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import { clinicApi, studentsApi, request } from "@/services/api";
 
 const loading = ref(true);
