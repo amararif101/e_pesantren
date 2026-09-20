@@ -1092,14 +1092,8 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       return c.json({ success: true, data: [] });
     }
 
-    const user = c.get("user");
-    const genderScope = await getStudentGenderScope(user.userId, user.role);
-
-    // Filter members: ensure student exists and is allowed by gender scope
-    const validMembers = members.filter((m) => {
-      if (!m.student) return false;
-      return isStudentGenderAllowed(m.student.gender, genderScope);
-    });
+    // Filter members: ensure student record exists
+    const validMembers = members.filter((m) => m.student != null);
 
     if (!validMembers.length) {
       return c.json({ success: true, data: [] });

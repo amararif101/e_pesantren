@@ -368,12 +368,7 @@ halaqahRoute.get("/:id/members", async (c) => {
       }),
     );
 
-    const user = c.get("user");
-    const genderScope = await getStudentGenderScope(user.userId, user.role);
-    const visibleMembers = membersWithDetails.filter((m) => {
-      if (!m.student) return false;
-      return isStudentGenderAllowed(m.student.gender, genderScope);
-    });
+    const visibleMembers = membersWithDetails.filter((m) => m.student != null);
 
     return c.json({
       success: true,
