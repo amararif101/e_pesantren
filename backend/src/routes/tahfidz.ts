@@ -42,7 +42,7 @@ import {
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getJuzFromPage, getJuzFromSurah } from "../utils/quran-mapping";
-import { checkJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
+import { checkJuzCompletionBlock, safeCheckJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
 import { canBackdateTahfidzDeposit, isDateBeforeToday } from "../utils/tahfidz-permission";
 import { authMiddleware, requirePermission } from "../middleware/auth";
 import {
@@ -411,7 +411,7 @@ app.post("/deposits", zValidator("json", depositSchema), async (c) => {
     // Taqdim (ziyadah) is blocked once the student has finished a juz until
     // they pass the UKJ exam for it.
     if (body.type === "ziyadah") {
-      const juzBlock = await checkJuzCompletionBlock(body.studentId);
+      const juzBlock = await safeCheckJuzCompletionBlock(body.studentId);
       if (juzBlock.blocked) {
         return c.json(
           {
@@ -1114,7 +1114,7 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
         const exceptionDeposit = studentDeposits.find((d) =>
           ["izin", "alpha", "sakit", "tidak_setor"].includes(d.type),
         );
-        const juzBlock = await checkJuzCompletionBlock(m.studentId);
+        const juzBlock = await safeCheckJuzCompletionBlock(m.studentId);
 
         return {
           student: {
@@ -1470,7 +1470,7 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
           studentId: m.studentId,
           fullName: m.student?.fullName,
           halaqahName: g.name,
-          block: await checkJuzCompletionBlock(m.studentId),
+          block: await safeCheckJuzCompletionBlock(m.studentId),
         })),
       ),
     );

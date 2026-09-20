@@ -4,9 +4,26 @@ import path from "path";
 
 const app = new Hono();
 
-// Initialize Quran SQLite database
+// Initialize Quran SQLite database. Opened lazily and never let to throw at
+// import time - a missing/unreadable quran.db here would otherwise crash
+// the entire backend process at startup, not just these Quran endpoints.
 const dbPath = path.join(process.cwd(), "data", "quran.db");
-const quranDb = new Database(dbPath, { readonly: true });
+let quranDb: Database | null = null;
+try {
+  quranDb = new Database(dbPath, { readonly: true });
+} catch (e) {
+  console.error("Failed to open quran.db - /api/quran endpoints will be unavailable:", e);
+}
+
+app.use("*", async (c, next) => {
+  if (!quranDb) {
+    return c.json(
+      { success: false, message: "Data Quran tidak tersedia di server ini" },
+      503,
+    );
+  }
+  await next();
+});
 
 // Types
 interface Surah {
@@ -35,7 +52,7 @@ interface Ayat {
 // GET /surahs - List all surahs with metadata
 app.get("/surahs", (c) => {
   try {
-    const surahs = quranDb
+    const surahs = quranDb!
       .query(
         `
       SELECT 
@@ -65,7 +82,7 @@ app.get("/surah/:id", (c) => {
   const surahId = Number(c.req.param("id"));
 
   try {
-    const ayat = quranDb
+    const ayat = quranDb!
       .query(
         `
       SELECT 
@@ -108,7 +125,7 @@ app.get("/ayat/:surah/:ayat", (c) => {
   const ayatNo = Number(c.req.param("ayat"));
 
   try {
-    const ayat = quranDb
+    const ayat = quranDb!
       .query(
         `
       SELECT 
@@ -147,7 +164,7 @@ app.post("/calculate", async (c) => {
 
   try {
     // Get start ayat info
-    const startInfo = quranDb
+    const startInfo = quranDb!
       .query(
         `
       SELECT id, jozz, page, line_start, line_end, sora_name_en, sora_name_ar
@@ -158,7 +175,7 @@ app.post("/calculate", async (c) => {
       .get(startSurah, startAyat) as any;
 
     // Get end ayat info
-    const endInfo = quranDb
+    const endInfo = quranDb!
       .query(
         `
       SELECT id, jozz, page, line_start, line_end, sora_name_en, sora_name_ar
@@ -177,7 +194,7 @@ app.post("/calculate", async (c) => {
     // But simpler: (end_page - start_page) + fractional based on line positions
 
     // Get count of ayat
-    const countResult = quranDb
+    const countResult = quranDb!
       .query(
         `SELECT COUNT(*) as ayat_count FROM quran WHERE id >= ? AND id <= ?`
       )
@@ -224,7 +241,7 @@ app.post("/calculate", async (c) => {
     const totalLines = Math.round(totalPages * 15);
 
     // Get juz info (could span multiple juz)
-    const juzResult = quranDb
+    const juzResult = quranDb!
       .query(
         `
       SELECT DISTINCT jozz FROM quran 

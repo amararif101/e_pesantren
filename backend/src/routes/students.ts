@@ -165,42 +165,49 @@ studentsRoute.get("/", async (c) => {
       }
     }
 
-    // Enrich students with halaqah, room, and class info
+    // Enrich students with halaqah, room, and class info. Each student is
+    // isolated in its own try/catch so one student's broken relation (e.g.
+    // an orphaned FK) can't blank out the entire list for everyone else.
     const enrichedStudents = await Promise.all(
       allStudents.map(async (student) => {
-        // Get halaqah membership
-        const halaqahMember = await db.query.halaqahMembers.findFirst({
-          where: eq(halaqahMembers.studentId, student.id),
-        });
-        let halaqah = null;
-        if (halaqahMember) {
-          halaqah = await db.query.halaqahGroups.findFirst({
-            where: eq(halaqahGroups.id, halaqahMember.halaqahId),
+        try {
+          // Get halaqah membership
+          const halaqahMember = await db.query.halaqahMembers.findFirst({
+            where: eq(halaqahMembers.studentId, student.id),
           });
-        }
+          let halaqah = null;
+          if (halaqahMember) {
+            halaqah = await db.query.halaqahGroups.findFirst({
+              where: eq(halaqahGroups.id, halaqahMember.halaqahId),
+            });
+          }
 
-        // Get room info
-        let room = null;
-        if (student.roomId) {
-          room = await db.query.rooms.findFirst({
-            where: eq(rooms.id, student.roomId),
-          });
-        }
+          // Get room info
+          let room = null;
+          if (student.roomId) {
+            room = await db.query.rooms.findFirst({
+              where: eq(rooms.id, student.roomId),
+            });
+          }
 
-        // Get class info
-        let classInfo = null;
-        if (student.classId) {
-          classInfo = await db.query.classes.findFirst({
-            where: eq(classes.id, student.classId),
-          });
-        }
+          // Get class info
+          let classInfo = null;
+          if (student.classId) {
+            classInfo = await db.query.classes.findFirst({
+              where: eq(classes.id, student.classId),
+            });
+          }
 
-        return {
-          ...student,
-          halaqah: halaqah ? { id: halaqah.id, name: halaqah.name } : null,
-          room: room ? { id: room.id, name: room.name } : null,
-          class: classInfo ? { id: classInfo.id, name: classInfo.name } : null,
-        };
+          return {
+            ...student,
+            halaqah: halaqah ? { id: halaqah.id, name: halaqah.name } : null,
+            room: room ? { id: room.id, name: room.name } : null,
+            class: classInfo ? { id: classInfo.id, name: classInfo.name } : null,
+          };
+        } catch (enrichError) {
+          console.error(`Failed to enrich student ${student.id}:`, enrichError);
+          return { ...student, halaqah: null, room: null, class: null };
+        }
       }),
     );
 
