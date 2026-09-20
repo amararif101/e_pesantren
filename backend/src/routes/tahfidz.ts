@@ -1108,10 +1108,13 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     const studentIds = validMembers.map((m) => m.studentId);
 
     // 2. Get deposits for these students on the specific date
+    const startOfDay = `${dateStr} 00:00:00`;
+    const endOfDay = `${dateStr} 23:59:59`;
     const deposits = await db.query.tahfidzDeposits.findMany({
       where: and(
         inArray(tahfidzDeposits.studentId, studentIds),
-        sql`DATE(${tahfidzDeposits.depositDate}) = ${dateStr}`,
+        sql`${tahfidzDeposits.depositDate} >= ${startOfDay}`,
+        sql`${tahfidzDeposits.depositDate} <= ${endOfDay}`,
       ),
     });
 
@@ -1283,11 +1286,14 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     }));
 
     // 3-5. Deposits for the selected date across every active tahfidz student
+    const dayStartStr = `${dateStr} 00:00:00`;
+    const dayEndStr = `${dateStr} 23:59:59`;
     const dayDeposits = activeStudentIds.length
       ? await db.query.tahfidzDeposits.findMany({
           where: and(
             inArray(tahfidzDeposits.studentId, activeStudentIds),
-            sql`DATE(${tahfidzDeposits.depositDate}) = ${dateStr}`,
+            sql`${tahfidzDeposits.depositDate} >= ${dayStartStr}`,
+            sql`${tahfidzDeposits.depositDate} <= ${dayEndStr}`,
           ),
         })
       : [];
