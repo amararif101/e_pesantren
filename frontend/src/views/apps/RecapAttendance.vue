@@ -114,8 +114,8 @@
           class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 min-w-[120px] w-full md:w-auto"
         >
           <option value="">Semua Gender</option>
-          <option value="male">Laki-laki</option>
-          <option value="female">Perempuan</option>
+          <option value="male">Ikhwan</option>
+          <option value="female">Akhwat</option>
         </select>
 
         <!-- Actions -->
@@ -1004,7 +1004,7 @@ async function exportToExcel() {
     const divisionName = filter.divisionId
       ? (divisions.value.find((d) => String(d.id) === String(filter.divisionId))?.name || "Semua Divisi")
       : "Semua Divisi";
-    const genderName = filter.gender === "male" ? "Laki-laki" : (filter.gender === "female" ? "Perempuan" : "Semua Gender");
+    const genderName = filter.gender === "male" ? "Ikhwan" : (filter.gender === "female" ? "Akhwat" : "Semua Gender");
     titleCell3.value = `Divisi: ${divisionName}     Gender: ${genderName}`;
     titleCell3.font = { size: 10, name: "Calibri" };
     titleCell3.alignment = { horizontal: "center", vertical: "middle" };

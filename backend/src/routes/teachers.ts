@@ -584,9 +584,11 @@ teachersRoute.post(
 
       const genderMapping: { [key: string]: string } = {
         "Laki-laki": "male",
+        Ikhwan: "male",
         L: "male",
         Male: "male",
         Perempuan: "female",
+        Akhwat: "female",
         P: "female",
         Female: "female",
       };
@@ -763,9 +765,11 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
     };
     const genderMapping: any = {
       "Laki-laki": "male",
+      Ikhwan: "male",
       L: "male",
       Male: "male",
       Perempuan: "female",
+      Akhwat: "female",
       P: "female",
       Female: "female",
     };

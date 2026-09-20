@@ -835,6 +835,23 @@
                         JPL
                       </td>
                     </tr>
+                    <tr class="h-7">
+                      <td
+                        class="border border-slate-300 px-2 bg-slate-50 font-medium align-middle"
+                      >
+                        Tidak Setor (TS)
+                      </td>
+                      <td
+                        class="border border-slate-300 px-2 text-center align-middle"
+                      >
+                        {{ attendance.tidakSetor }}
+                      </td>
+                      <td
+                        class="border border-slate-300 px-2 bg-slate-50 font-medium align-middle"
+                      >
+                        JPL
+                      </td>
+                    </tr>
                   </table>
                 </div>
               </div>
@@ -1015,7 +1032,7 @@ const allStudents = ref([]);
 const student = ref(null);
 const settings = ref({});
 const exams = ref([]);
-const attendance = ref({ sakit: 0, izin: 0, alpha: 0 });
+const attendance = ref({ sakit: 0, izin: 0, alpha: 0, tidakSetor: 0 });
 const totalHafalan = ref(0);
 const notes = ref("");
 const targetHafalan = ref(50); // Default, updated from API
@@ -1293,7 +1310,12 @@ async function selectStudent(s) {
       student.value = d.student;
       exams.value = d.exams || [];
 
-      attendance.value = d.attendance || { sakit: 0, izin: 0, alpha: 0 };
+      attendance.value = d.attendance || {
+        sakit: 0,
+        izin: 0,
+        alpha: 0,
+        tidakSetor: 0,
+      };
       totalHafalan.value = Number(d.totalHafalan || 0);
       settings.value = d.settings || {};
       madingData.value = d.mading || [];

@@ -39,8 +39,8 @@
           class="text-sm border-none focus:ring-0 text-slate-600 bg-transparent"
         >
           <option value="">Semua JK</option>
-          <option value="L">Laki-laki</option>
-          <option value="P">Perempuan</option>
+          <option value="L">Ikhwan</option>
+          <option value="P">Akhwat</option>
         </select>
         <button
           @click="fetchReports"
@@ -53,54 +53,24 @@
 
     <!-- Stats Summary Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div
-        class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:users-group-rounded-bold-duotone" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500 font-medium">Total Kunjungan</div>
-          <div class="text-2xl font-bold text-slate-800">{{ totalVisits }}</div>
-        </div>
-      </div>
-      <div
-        class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:heart-pulse-bold-duotone" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500 font-medium">
-            Diagnosa Terbanyak
-          </div>
-          <div
-            class="text-lg font-bold text-slate-800 truncate max-w-[150px]"
-            :title="topDisease"
-          >
-            {{ topDisease }}
-          </div>
-        </div>
-      </div>
-      <div
-        class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl"
-        >
-          <Icon icon="solar:user-id-bold-duotone" />
-        </div>
-        <div>
-          <div class="text-sm text-slate-500 font-medium">Mayoritas Pasien</div>
-          <div class="text-lg font-bold text-slate-800">
-            {{ topPatientType }}
-          </div>
-        </div>
-      </div>
+      <StatCard
+        icon="solar:users-group-rounded-bold-duotone"
+        color="blue"
+        label="Total Kunjungan"
+        :value="totalVisits"
+      />
+      <StatCard
+        icon="solar:heart-pulse-bold-duotone"
+        color="red"
+        label="Diagnosa Terbanyak"
+        :value="topDisease"
+      />
+      <StatCard
+        icon="solar:user-id-bold-duotone"
+        color="amber"
+        label="Mayoritas Pasien"
+        :value="topPatientType"
+      />
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -217,6 +187,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";
 import { request } from "@/services/api";
 

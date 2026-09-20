@@ -121,12 +121,17 @@ const submenuByMain = {
         label: "Tahfidz",
         icon: "solar:book-bookmark-line-duotone",
         children: [
+          { label: "Dashboard Monitoring", route: "/apps/tahfidz/monitoring" },
           { label: "Grup Halaqah", route: "/apps/halaqah" },
           { label: "Mutaba'ah", route: "/apps/tahfidz/dashboard" },
           { label: "Input per Halaqah", route: "/apps/tahfidz/halaqah" },
           { label: "Ujian Tahfidz", route: "/apps/tahfidz/exams" },
           { label: "Rapor", route: "/apps/tahfidz/reports" },
           { label: "Mading Halaqah", route: "/apps/tahfidz/mading" },
+          {
+            label: "Mading Sertifikasi",
+            route: "/apps/tahfidz/mading-sertifikasi",
+          },
           { label: "Pengaturan Tahfidz", route: "/apps/tahfidz/settings" },
         ],
       },

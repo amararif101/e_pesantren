@@ -146,8 +146,8 @@
               @change="applyFilters"
             >
               <option value="">Semua Gender</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="male">Ikhwan</option>
+              <option value="female">Akhwat</option>
             </select>
           </div>
           <div>
@@ -249,7 +249,7 @@
             class="text-base"
           />
           <span class="text-slate-600">{{
-            item.gender === "male" ? "Laki-laki" : "Perempuan"
+            item.gender === "male" ? "Ikhwan" : "Akhwat"
           }}</span>
         </div>
       </template>
@@ -545,7 +545,7 @@
                         value="male"
                         class="text-[#602515] focus:ring-[#602515]"
                       />
-                      <span class="text-sm">Laki-laki</span>
+                      <span class="text-sm">Ikhwan</span>
                     </label>
                     <label class="flex items-center gap-2">
                       <input
@@ -554,7 +554,7 @@
                         value="female"
                         class="text-[#602515] focus:ring-[#602515]"
                       />
-                      <span class="text-sm">Perempuan</span>
+                      <span class="text-sm">Akhwat</span>
                     </label>
                   </div>
                 </div>
@@ -695,7 +695,7 @@
               <div>
                 <div class="text-xs text-slate-500">Gender</div>
                 <div class="font-medium">
-                  {{ view.item.gender === "male" ? "Laki-laki" : "Perempuan" }}
+                  {{ view.item.gender === "male" ? "Ikhwan" : "Akhwat" }}
                 </div>
               </div>
             </div>
@@ -1074,7 +1074,7 @@ const studentImportTemplate = [
     "NIS Santri": "P-12345",
     "Nama Lengkap": "Contoh Nama Santri",
     "Nama Arab": "محمد علي",
-    "Jenis Kelamin": "Laki-laki",
+    "Jenis Kelamin": "Ikhwan",
     "Tanggal Lahir": "2010-01-15",
     "Tempat Lahir": "Jakarta",
     // Field Alamat Terpisah

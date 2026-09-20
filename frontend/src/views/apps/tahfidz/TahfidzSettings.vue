@@ -394,6 +394,8 @@
                     'bg-green-100 text-green-700': t.category === 'UKJ',
                     'bg-purple-100 text-purple-700': t.category === 'UA',
                     'bg-amber-100 text-amber-700': t.category === 'Suluk',
+                    'bg-teal-100 text-teal-700': t.category === 'Jilsah',
+                    'bg-indigo-100 text-indigo-700': t.category === 'Sertifikasi',
                     'bg-slate-100 text-slate-700': t.category === 'Other',
                   }"
                   >{{ t.category }}</span
@@ -455,6 +457,8 @@
                   'bg-green-100 text-green-700': t.category === 'UKJ',
                   'bg-purple-100 text-purple-700': t.category === 'UA',
                   'bg-amber-100 text-amber-700': t.category === 'Suluk',
+                  'bg-teal-100 text-teal-700': t.category === 'Jilsah',
+                  'bg-indigo-100 text-indigo-700': t.category === 'Sertifikasi',
                   'bg-slate-100 text-slate-700': t.category === 'Other',
                 }"
                 >{{ t.category }}</span
@@ -522,6 +526,8 @@
               <option value="UKJ">UKJ (Ujian Kenaikan Juz)</option>
               <option value="UA">UA (Ujian Akhir)</option>
               <option value="Suluk">Suluk (Ujian Adab)</option>
+              <option value="Jilsah">Jilsah</option>
+              <option value="Sertifikasi">Sertifikasi</option>
             </select>
             <p class="text-xs text-slate-500 mt-1">
               Kategori menentukan input nilai khusus (misal: UKJ butuh input

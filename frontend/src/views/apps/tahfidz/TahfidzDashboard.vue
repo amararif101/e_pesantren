@@ -2,7 +2,7 @@
   <div class="max-w-7xl mx-auto pb-12">
     <!-- Header -->
     <div
-      class="p-2 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
+      class="p-2 md:p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
       <div>
         <h1 class="text-2xl font-bold text-slate-800">Mutaba'ah Tahfidz</h1>
@@ -14,37 +14,19 @@
     </div>
 
     <!-- Stats Cards -->
-    <div class="p-2 grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div
-        class="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center"
-        >
-          <Icon icon="solar:book-bookmark-bold-duotone" class="text-2xl" />
-        </div>
-        <div>
-          <p class="text-sm text-slate-500">Santri Menghafal</p>
-          <h3 class="text-2xl font-bold text-slate-800">
-            {{ stats.activeStudents }}
-          </h3>
-        </div>
-      </div>
-      <div
-        class="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4"
-      >
-        <div
-          class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center"
-        >
-          <Icon icon="solar:check-read-bold-duotone" class="text-2xl" />
-        </div>
-        <div>
-          <p class="text-sm text-slate-500">Total Setoran</p>
-          <h3 class="text-2xl font-bold text-slate-800">
-            {{ stats.totalDeposits }}
-          </h3>
-        </div>
-      </div>
+    <div class="p-2 md:p-6 md:pt-0 md:pb-0 grid grid-cols-1 md:grid-cols-2 gap-4 mb-0">
+      <StatCard
+        icon="solar:book-bookmark-bold-duotone"
+        color="emerald"
+        label="Santri Menghafal"
+        :value="stats.activeStudents"
+      />
+      <StatCard
+        icon="solar:check-read-bold-duotone"
+        color="indigo"
+        label="Total Setoran"
+        :value="stats.totalDeposits"
+      />
       <!-- Add more stats if needed -->
     </div>
 
@@ -108,12 +90,12 @@
         <span
           class="px-2 py-1 rounded-full text-xs font-medium"
           :class="{
-            'bg-green-100 text-green-700': item.fluency === 'lancar',
-            'bg-yellow-100 text-yellow-700': item.fluency === 'kurang_lancar',
-            'bg-red-100 text-red-700': item.fluency === 'mengulang',
+            'bg-green-100 text-green-700': item.fluency === 'A',
+            'bg-yellow-100 text-yellow-700': item.fluency === 'B',
+            'bg-red-100 text-red-700': item.fluency === 'C',
           }"
         >
-          {{ formatFluency(item.fluency) }}
+          {{ item.fluency }}
         </span>
       </template>
 
@@ -123,6 +105,10 @@
           :class="{
             'bg-blue-50 text-blue-700 border border-blue-100':
               item.type === 'ziyadah',
+            'bg-teal-50 text-teal-700 border border-teal-100':
+              item.type === 'sabqi',
+            'bg-indigo-50 text-indigo-700 border border-indigo-100':
+              item.type === 'manzil',
             'bg-slate-50 text-slate-700 border border-slate-200':
               item.type === 'murajaah',
             'bg-sky-50 text-sky-700 border border-sky-100':
@@ -131,18 +117,26 @@
               item.type === 'izin',
             'bg-rose-50 text-rose-700 border border-rose-100':
               item.type === 'alpha',
+            'bg-orange-50 text-orange-700 border border-orange-100':
+              item.type === 'tidak_setor',
           }"
         >
           {{
             item.type === "ziyadah"
-              ? "Ziyadah"
-              : item.type === "murajaah"
-                ? "Muraja'ah"
-                : item.type === "sakit"
-                  ? "Sakit"
-                  : item.type === "izin"
-                    ? "Izin"
-                    : "Alpha"
+              ? "Taqdim"
+              : item.type === "sabqi"
+                ? "Sabqi"
+                : item.type === "manzil"
+                  ? "Manzil"
+                  : item.type === "murajaah"
+                    ? "Muraja'ah"
+                    : item.type === "sakit"
+                      ? "Sakit"
+                      : item.type === "izin"
+                        ? "Izin"
+                        : item.type === "tidak_setor"
+                          ? "Tidak Setor"
+                          : "Alpha"
           }}
         </span>
       </template>
@@ -162,6 +156,19 @@
             class="text-yellow-600 font-bold"
             >Izin</span
           >
+          <span
+            v-else-if="item.type === 'tidak_setor'"
+            class="text-orange-600 font-bold"
+            >Tidak Setor</span
+          >
+          <span
+            v-else-if="item.type === 'sabqi' || item.type === 'manzil'"
+            class="font-bold"
+            :class="item.type === 'sabqi' ? 'text-teal-600' : 'text-indigo-600'"
+          >
+            {{ item.type === "sabqi" ? "Sabqi" : "Manzil" }}:
+            {{ item.isCompleted ? "Sudah" : "Belum" }}
+          </span>
           <span v-else>
             <div v-if="item.startSurah">
               <div class="font-bold text-slate-800">
@@ -253,6 +260,10 @@
               :class="{
                 'bg-blue-50 text-blue-700 border border-blue-100':
                   item.type === 'ziyadah',
+                'bg-teal-50 text-teal-700 border border-teal-100':
+                  item.type === 'sabqi',
+                'bg-indigo-50 text-indigo-700 border border-indigo-100':
+                  item.type === 'manzil',
                 'bg-slate-50 text-slate-700 border border-slate-200':
                   item.type === 'murajaah',
                 'bg-sky-50 text-sky-700 border border-sky-100':
@@ -261,30 +272,37 @@
                   item.type === 'izin',
                 'bg-rose-50 text-rose-700 border border-rose-100':
                   item.type === 'alpha',
+                'bg-orange-50 text-orange-700 border border-orange-100':
+                  item.type === 'tidak_setor',
               }"
             >
               {{
                 item.type === "ziyadah"
-                  ? "Ziyadah"
-                  : item.type === "murajaah"
-                    ? "Muraja'ah"
-                    : item.type === "sakit"
-                      ? "Sakit"
-                      : item.type === "izin"
-                        ? "Izin"
-                        : "Alpha"
+                  ? "Taqdim"
+                  : item.type === "sabqi"
+                    ? "Sabqi"
+                    : item.type === "manzil"
+                      ? "Manzil"
+                      : item.type === "murajaah"
+                        ? "Muraja'ah"
+                        : item.type === "sakit"
+                          ? "Sakit"
+                          : item.type === "izin"
+                            ? "Izin"
+                            : item.type === "tidak_setor"
+                              ? "Tidak Setor"
+                              : "Alpha"
               }}
             </span>
             <span
               class="px-2 py-1 rounded-full text-xs font-medium"
               :class="{
-                'bg-green-100 text-green-700': item.fluency === 'lancar',
-                'bg-yellow-100 text-yellow-700':
-                  item.fluency === 'kurang_lancar',
-                'bg-red-100 text-red-700': item.fluency === 'mengulang',
+                'bg-green-100 text-green-700': item.fluency === 'A',
+                'bg-yellow-100 text-yellow-700': item.fluency === 'B',
+                'bg-red-100 text-red-700': item.fluency === 'C',
               }"
             >
-              {{ formatFluency(item.fluency) }}
+              {{ item.fluency }}
             </span>
           </div>
 
@@ -308,6 +326,19 @@
                 class="text-yellow-600 font-bold"
                 >Izin</span
               >
+              <span
+                v-else-if="item.type === 'tidak_setor'"
+                class="text-orange-600 font-bold"
+                >Tidak Setor</span
+              >
+              <span
+                v-else-if="item.type === 'sabqi' || item.type === 'manzil'"
+                class="font-bold"
+                :class="item.type === 'sabqi' ? 'text-teal-600' : 'text-indigo-600'"
+              >
+                {{ item.type === "sabqi" ? "Sabqi" : "Manzil" }}:
+                {{ item.isCompleted ? "Sudah" : "Belum" }}
+              </span>
               <span v-else>
                 <div v-if="item.startSurah">
                   <div class="font-bold text-slate-800 text-sm">
@@ -399,8 +430,8 @@
               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#602515]"
             >
               <option value="">Semua</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="male">Ikhwan</option>
+              <option value="female">Akhwat</option>
             </select>
           </div>
 
@@ -513,14 +544,16 @@
                     v-model="form.type"
                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none"
                   >
-                    <option value="ziyadah">Ziyadah (Baru)</option>
-                    <option value="murajaah">Muraja'ah (Ulang)</option>
+                    <option value="ziyadah">Taqdim (Baru)</option>
+                    <option value="sabqi">Sabqi</option>
+                    <option value="manzil">Manzil</option>
                     <option value="izin">Izin</option>
                     <option value="alpha">Alpha</option>
                     <option value="sakit">Sakit</option>
+                    <option value="tidak_setor">Tidak Setor</option>
                   </select>
                 </div>
-                <div>
+                <div v-if="showFullDepositForm">
                   <label class="block text-sm font-medium text-slate-700 mb-1"
                     >Kualitas</label
                   >
@@ -528,15 +561,27 @@
                     v-model="form.fluency"
                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none"
                   >
-                    <option value="lancar">Lancar</option>
-                    <option value="kurang_lancar">Kurang Lancar</option>
-                    <option value="mengulang">Mengulang</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
+                </div>
+                <div v-if="showSabqiManzilToggle">
+                  <label class="block text-sm font-medium text-slate-700 mb-1"
+                    >Status</label
+                  >
+                  <select
+                    v-model="form.isCompleted"
+                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none"
+                  >
+                    <option :value="true">Sudah</option>
+                    <option :value="false">Belum</option>
                   </select>
                 </div>
               </div>
 
               <!-- Posisi Mulai (Dari) -->
-              <div class="p-3 bg-slate-50 rounded-lg">
+              <div v-if="showFullDepositForm" class="p-3 bg-slate-50 rounded-lg">
                 <h4 class="text-sm font-semibold text-slate-700 mb-3">
                   📖 Posisi Mulai (Dari)
                 </h4>
@@ -600,7 +645,7 @@
               </div>
 
               <!-- Posisi Akhir (Sampai) -->
-              <div class="p-3 bg-slate-50 rounded-lg">
+              <div v-if="showFullDepositForm" class="p-3 bg-slate-50 rounded-lg">
                 <h4 class="text-sm font-semibold text-slate-700 mb-3">
                   📖 Posisi Akhir (Sampai)
                 </h4>
@@ -665,7 +710,7 @@
 
               <!-- Ringkasan Kalkulasi -->
               <div
-                v-if="calculatedResult"
+                v-if="calculatedResult && showFullDepositForm"
                 class="p-3 bg-amber-50 border border-amber-200 rounded-lg"
               >
                 <h4 class="text-sm font-semibold text-amber-800 mb-2">
@@ -706,7 +751,7 @@
               </div>
 
               <!-- Late Checkbox -->
-              <div class="flex items-center gap-2">
+              <div v-if="!isAttendanceOnlyType" class="flex items-center gap-2">
                 <input
                   type="checkbox"
                   v-model="form.isLate"
@@ -784,6 +829,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import DataTable from "@/components/ui/DataTable.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import {
@@ -847,7 +893,7 @@ const form = reactive({
   id: null,
   studentId: "",
   type: "ziyadah",
-  fluency: "lancar",
+  fluency: "A",
   // New line-based fields
   startSurah: "",
   startAyat: "",
@@ -860,6 +906,7 @@ const form = reactive({
   // Other
   notes: "",
   isLate: false,
+  isCompleted: null,
 });
 
 const filters = reactive({
@@ -871,6 +918,16 @@ const filters = reactive({
 
 const halaqahList = ref([]);
 
+// Jenis grouping: Taqdim pakai form lengkap, Sabqi/Manzil cuma Sudah/Belum,
+// Izin/Alpha/Sakit/Tidak Setor tanpa field posisi hafalan
+const isAttendanceOnlyType = computed(() =>
+  ["izin", "alpha", "sakit", "tidak_setor"].includes(form.type),
+);
+const showFullDepositForm = computed(() => form.type === "ziyadah");
+const showSabqiManzilToggle = computed(
+  () => form.type === "sabqi" || form.type === "manzil",
+);
+
 // Computed for surah info
 const startSurahInfo = computed(() => {
   return surahList.value.find((s) => s.sora === form.startSurah);
@@ -879,15 +936,6 @@ const startSurahInfo = computed(() => {
 const endSurahInfo = computed(() => {
   return surahList.value.find((s) => s.sora === form.endSurah);
 });
-
-function formatFluency(val) {
-  const map = {
-    lancar: "Lancar",
-    kurang_lancar: "Kurang Lancar",
-    mengulang: "Mengulang",
-  };
-  return map[val] || val;
-}
 
 function getSurahName(number) {
   const surah = surahList.value.find((s) => s.sora === Number(number));
@@ -1181,7 +1229,7 @@ async function openInputModal() {
     id: null,
     studentId: "",
     type: "ziyadah",
-    fluency: "lancar",
+    fluency: "A",
     startSurah: "",
     startAyat: "",
     startPage: "",
@@ -1192,6 +1240,7 @@ async function openInputModal() {
     totalPages: "",
     notes: "",
     isLate: false,
+    isCompleted: null,
   });
   studentSearch.value = "";
   calculatedResult.value = null;
@@ -1212,38 +1261,45 @@ async function submitDeposit() {
     alert("Mohon pilih santri terlebih dahulu");
     return;
   }
-  if (!form.startSurah || !form.startAyat || !form.endSurah || !form.endAyat) {
+  if (
+    showFullDepositForm.value &&
+    (!form.startSurah || !form.startAyat || !form.endSurah || !form.endAyat)
+  ) {
     alert("Mohon isi posisi mulai dan akhir hafalan");
     return;
   }
 
   saving.value = true;
   try {
-    const isDepositType =
-      form.type !== "izin" && form.type !== "alpha" && form.type !== "sakit";
+    const isFullDeposit = form.type === "ziyadah";
+    const isAttendanceOnly = ["izin", "alpha", "sakit", "tidak_setor"].includes(
+      form.type,
+    );
+    const isSabqiManzil = form.type === "sabqi" || form.type === "manzil";
 
     const payload = {
       studentId: Number(form.studentId),
       teacherId: currentUser.value?.teacher?.id || defaultTeacherId.value || 1,
       type: form.type,
-      fluency: isDepositType ? form.fluency : undefined,
-      isLate: isDepositType ? form.isLate || false : false,
+      fluency: isFullDeposit ? form.fluency : undefined,
+      isLate: !isAttendanceOnly ? form.isLate || false : false,
+      isCompleted: isSabqiManzil ? form.isCompleted : null,
       depositDate: new Date(),
       notes: form.notes || undefined,
       // New line-based fields
       startSurah:
-        isDepositType && form.startSurah ? Number(form.startSurah) : null,
+        isFullDeposit && form.startSurah ? Number(form.startSurah) : null,
       startAyat:
-        isDepositType && form.startAyat ? Number(form.startAyat) : null,
+        isFullDeposit && form.startAyat ? Number(form.startAyat) : null,
       startPage:
-        isDepositType && form.startPage ? Number(form.startPage) : null,
-      endSurah: isDepositType && form.endSurah ? Number(form.endSurah) : null,
-      endAyat: isDepositType && form.endAyat ? Number(form.endAyat) : null,
-      endPage: isDepositType && form.endPage ? Number(form.endPage) : null,
+        isFullDeposit && form.startPage ? Number(form.startPage) : null,
+      endSurah: isFullDeposit && form.endSurah ? Number(form.endSurah) : null,
+      endAyat: isFullDeposit && form.endAyat ? Number(form.endAyat) : null,
+      endPage: isFullDeposit && form.endPage ? Number(form.endPage) : null,
       totalLines:
-        isDepositType && form.totalLines ? Number(form.totalLines) : null,
+        isFullDeposit && form.totalLines ? Number(form.totalLines) : null,
       totalPages:
-        isDepositType && form.totalPages ? Number(form.totalPages) : null,
+        isFullDeposit && form.totalPages ? Number(form.totalPages) : null,
     };
 
     if (form.id) {
@@ -1295,7 +1351,7 @@ async function editDeposit(item) {
     id: item.id,
     studentId: item.studentId,
     type: item.type,
-    fluency: item.fluency || "lancar",
+    fluency: item.fluency || "A",
     startSurah: item.startSurah || "",
     startAyat: item.startAyat || "",
     startPage: item.startPage || "",
@@ -1306,6 +1362,7 @@ async function editDeposit(item) {
     totalPages: item.totalPages || "",
     notes: item.notes || "",
     isLate: item.isLate || false,
+    isCompleted: item.isCompleted === undefined ? null : item.isCompleted,
   });
 
   calculatedResult.value = null;

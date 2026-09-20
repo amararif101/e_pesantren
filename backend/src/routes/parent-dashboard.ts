@@ -496,6 +496,7 @@ parentDashboard.get("/child/:studentId/tahfidz", async (c) => {
         id: tahfidzDeposits.id,
         depositDate: tahfidzDeposits.depositDate,
         type: tahfidzDeposits.type,
+        isCompleted: tahfidzDeposits.isCompleted,
         startSurah: tahfidzDeposits.startSurah,
         startAyat: tahfidzDeposits.startAyat,
         endSurah: tahfidzDeposits.endSurah,

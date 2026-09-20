@@ -96,6 +96,11 @@ const availableRoutes = [
   },
 
   // Tahfidz
+  {
+    path: "/apps/tahfidz/monitoring",
+    label: "Dashboard Monitoring",
+    category: "Tahfidz",
+  },
   { path: "/apps/halaqah", label: "Grup Halaqah", category: "Tahfidz" },
   { path: "/apps/tahfidz/dashboard", label: "Mutaba'ah", category: "Tahfidz" },
   {
@@ -112,6 +117,11 @@ const availableRoutes = [
   {
     path: "/apps/tahfidz/mading",
     label: "Mading Halaqah",
+    category: "Tahfidz",
+  },
+  {
+    path: "/apps/tahfidz/mading-sertifikasi",
+    label: "Mading Sertifikasi",
     category: "Tahfidz",
   },
   {

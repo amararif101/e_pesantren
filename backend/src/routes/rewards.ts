@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import {
   rewardsPunishments,
@@ -11,6 +11,11 @@ import {
   createRewardPunishmentSchema,
   updateRewardPunishmentSchema,
 } from "../validators/rewards";
+import {
+  getStudentGenderScope,
+  getAllowedStudentIds,
+  requireStudentGenderAccess,
+} from "../utils/gender-scope";
 
 const rewardsRoute = new Hono();
 
@@ -24,21 +29,24 @@ rewardsRoute.get("/rewards", async (c) => {
   try {
     const studentId = c.req.query("studentId");
 
-    let records;
-    if (studentId) {
-      records = await db.query.rewardsPunishments.findMany({
-        where: and(
-          eq(rewardsPunishments.type, "reward"),
-          eq(rewardsPunishments.studentId, parseInt(studentId))
-        ),
-        with: { student: { with: { class: true, room: true } } },
-      });
-    } else {
-      records = await db.query.rewardsPunishments.findMany({
-        where: eq(rewardsPunishments.type, "reward"),
-        with: { student: { with: { class: true, room: true } } },
-      });
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && allowedIds.length === 0) {
+      return c.json({ success: true, data: [] });
     }
+
+    const conditions = [eq(rewardsPunishments.type, "reward")];
+    if (studentId) {
+      conditions.push(eq(rewardsPunishments.studentId, parseInt(studentId)));
+    }
+    if (allowedIds) {
+      conditions.push(inArray(rewardsPunishments.studentId, allowedIds));
+    }
+    const records = await db.query.rewardsPunishments.findMany({
+      where: and(...conditions),
+      with: { student: { with: { class: true, room: true } } },
+    });
 
     return c.json({
       success: true,
@@ -64,6 +72,9 @@ rewardsRoute.get("/rewards/:id", async (c) => {
     if (!record) {
       return c.json({ success: false, message: "Reward not found" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, record.studentId);
+    if (denied) return denied;
 
     return c.json({
       success: true,
@@ -218,21 +229,24 @@ rewardsRoute.get("/punishments", async (c) => {
   try {
     const studentId = c.req.query("studentId");
 
-    let records;
-    if (studentId) {
-      records = await db.query.rewardsPunishments.findMany({
-        where: and(
-          eq(rewardsPunishments.type, "punishment"),
-          eq(rewardsPunishments.studentId, parseInt(studentId))
-        ),
-        with: { student: { with: { class: true, room: true } } },
-      });
-    } else {
-      records = await db.query.rewardsPunishments.findMany({
-        where: eq(rewardsPunishments.type, "punishment"),
-        with: { student: { with: { class: true, room: true } } },
-      });
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && allowedIds.length === 0) {
+      return c.json({ success: true, data: [] });
     }
+
+    const conditions = [eq(rewardsPunishments.type, "punishment")];
+    if (studentId) {
+      conditions.push(eq(rewardsPunishments.studentId, parseInt(studentId)));
+    }
+    if (allowedIds) {
+      conditions.push(inArray(rewardsPunishments.studentId, allowedIds));
+    }
+    const records = await db.query.rewardsPunishments.findMany({
+      where: and(...conditions),
+      with: { student: { with: { class: true, room: true } } },
+    });
 
     return c.json({
       success: true,
@@ -261,6 +275,9 @@ rewardsRoute.get("/punishments/:id", async (c) => {
     if (!record) {
       return c.json({ success: false, message: "Punishment not found" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, record.studentId);
+    if (denied) return denied;
 
     return c.json({
       success: true,
@@ -422,16 +439,23 @@ rewardsRoute.get("/", async (c) => {
     const type = c.req.query("type"); // filter by reward or punishment
     const studentId = c.req.query("studentId");
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && allowedIds.length === 0) {
+      return c.json({ success: true, data: [] });
+    }
+
     let conditions: any[] = [];
     if (type) conditions.push(eq(rewardsPunishments.type, type as any));
     if (studentId)
       conditions.push(eq(rewardsPunishments.studentId, parseInt(studentId)));
+    if (allowedIds) conditions.push(inArray(rewardsPunishments.studentId, allowedIds));
 
     const records =
       conditions.length > 0
         ? await db.query.rewardsPunishments.findMany({
-            // @ts-ignore
-            where: conditions.length === 1 ? conditions[0] : conditions,
+            where: and(...conditions),
             with: { student: { with: { class: true, room: true } } },
           })
         : await db.query.rewardsPunishments.findMany({
@@ -452,6 +476,10 @@ rewardsRoute.get("/", async (c) => {
 rewardsRoute.get("/student/:studentId", async (c) => {
   try {
     const studentId = parseInt(c.req.param("studentId"));
+
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
+
     const records = await db.query.rewardsPunishments.findMany({
       where: eq(rewardsPunishments.studentId, studentId),
     });

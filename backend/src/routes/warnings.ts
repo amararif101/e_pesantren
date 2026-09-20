@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { studentWarnings } from "../db/schema/rewards-punishments";
 import { students } from "../db/schema/students";
 import { authMiddleware, requirePermission } from "../middleware/auth";
 import { z } from "zod";
+import { getStudentGenderScope, getAllowedStudentIds } from "../utils/gender-scope";
 
 const warningsRoute = new Hono();
 
@@ -37,11 +38,19 @@ warningsRoute.get("/", async (c) => {
     const studentId = c.req.query("studentId");
     const status = c.req.query("status");
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && allowedIds.length === 0) {
+      return c.json({ success: true, data: [] });
+    }
+
     let conditions: any[] = [];
     if (studentId)
       conditions.push(eq(studentWarnings.studentId, parseInt(studentId)));
     if (status && (status === "active" || status === "resolved"))
       conditions.push(eq(studentWarnings.status, status));
+    if (allowedIds) conditions.push(inArray(studentWarnings.studentId, allowedIds));
 
     const records = await db.query.studentWarnings.findMany({
       where: conditions.length > 0 ? and(...conditions) : undefined,

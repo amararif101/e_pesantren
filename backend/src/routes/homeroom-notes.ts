@@ -4,8 +4,12 @@ import { homeroomNotes, classes, students } from "../db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
+import { authMiddleware } from "../middleware/auth";
+import { getStudentGenderScope, requireStudentGenderAccess } from "../utils/gender-scope";
 
 const app = new Hono();
+
+app.use("*", authMiddleware);
 
 // GET /homeroom-notes?classId=&semester=&academicYear=
 app.get("/", async (c) => {
@@ -19,8 +23,12 @@ app.get("/", async (c) => {
     }
 
     // Get students in this class
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
     const classStudents = await db.query.students.findMany({
-      where: eq(students.classId, Number(classId)),
+      where: genderScope
+        ? and(eq(students.classId, Number(classId)), eq(students.gender, genderScope))
+        : eq(students.classId, Number(classId)),
       columns: {
         id: true,
         fullName: true,
@@ -192,6 +200,9 @@ app.get("/:studentId", async (c) => {
         400
       );
     }
+
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
 
     const note = await db.query.homeroomNotes.findFirst({
       where: and(

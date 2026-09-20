@@ -210,6 +210,16 @@ app.post("/calculate", async (c) => {
         ) / 100;
     }
 
+    // Round up to the next whole page once the fraction reaches .80
+    // (e.g. 0.87 -> 1.0), instead of leaving an awkward decimal.
+    const wholePages = Math.floor(totalPages);
+    // Re-round the subtraction: floating point makes e.g. 2.8 - 2 come out
+    // as 0.7999999999999998, which would silently miss the >= 0.8 check.
+    const pageFraction = Math.round((totalPages - wholePages) * 100) / 100;
+    if (pageFraction >= 0.8) {
+      totalPages = wholePages + 1;
+    }
+
     // Also calculate total lines for reference
     const totalLines = Math.round(totalPages * 15);
 

@@ -529,6 +529,12 @@ const router = createRouter({
           component: () => import("@/views/apps/tahfidz/TahfidzDashboard.vue"),
         },
         {
+          path: "apps/tahfidz/monitoring",
+          name: "TahfidzMonitoring",
+          component: () => import("@/views/apps/tahfidz/TahfidzMonitoring.vue"),
+          meta: { requiresAdmin: true },
+        },
+        {
           path: "apps/tahfidz/exams",
           name: "TahfidzExams",
           component: () => import("@/views/apps/tahfidz/TahfidzExams.vue"),
@@ -547,6 +553,12 @@ const router = createRouter({
           path: "apps/tahfidz/mading",
           name: "MadingHalaqah",
           component: () => import("@/views/apps/tahfidz/MadingHalaqah.vue"),
+        },
+        {
+          path: "apps/tahfidz/mading-sertifikasi",
+          name: "MadingSertifikasi",
+          component: () =>
+            import("@/views/apps/tahfidz/MadingSertifikasi.vue"),
         },
         {
           path: "apps/tahfidz/settings",

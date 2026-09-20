@@ -14,6 +14,7 @@ import { eq, and, gte, lte, inArray, sql, or, like, desc } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { getStudentGenderScope, getAllowedStudentIds } from "../utils/gender-scope";
 
 const studentLeavesRoute = new Hono();
 
@@ -25,6 +26,10 @@ studentLeavesRoute.get("/", async (c) => {
   const endDate = c.req.query("endDate");
   const q = c.req.query("q") || "";
 
+  const user = c.get("user");
+  const genderScope = await getStudentGenderScope(user.userId, user.role);
+  const allowedIds = await getAllowedStudentIds(genderScope);
+
   const results = await db.query.studentLeaves.findMany({
     where: and(
       startDate ? gte(studentLeaves.startDate, new Date(startDate)) : undefined,
@@ -33,6 +38,7 @@ studentLeavesRoute.get("/", async (c) => {
     ),
     with: {
       items: {
+        where: allowedIds ? inArray(studentLeaveItems.studentId, allowedIds) : undefined,
         with: {
           student: true
         }
@@ -41,18 +47,25 @@ studentLeavesRoute.get("/", async (c) => {
     orderBy: [desc(studentLeaves.createdAt)]
   });
 
-  return c.json({ success: true, data: results });
+  // A guru's own-gender-only view drops all items from a mixed-gender leave
+  // header; hide headers that end up with nothing left to show.
+  const filtered = allowedIds ? results.filter((r) => r.items.length > 0) : results;
+
+  return c.json({ success: true, data: filtered });
 });
 
 
 // GET /students/search - Search with higher limit
 studentLeavesRoute.get("/students/search", async (c) => {
   const q = c.req.query("q") || "";
+  const user = c.get("user");
+  const genderScope = await getStudentGenderScope(user.userId, user.role);
+  const nameOrNis = or(
+    like(students.fullName, `%${q}%`),
+    like(students.nis, `%${q}%`)
+  );
   const results = await db.query.students.findMany({
-    where: or(
-      like(students.fullName, `%${q}%`),
-      like(students.nis, `%${q}%`)
-    ),
+    where: genderScope ? and(nameOrNis, eq(students.gender, genderScope)) : nameOrNis,
     limit: 500, // Higher limit as requested
   });
   return c.json({ success: true, data: results });
@@ -67,6 +80,9 @@ studentLeavesRoute.get("/clinic-data", async (c) => {
   if (studentIds.length === 0 || !startDate || !endDate) {
     return c.json({ success: true, data: [] });
   }
+
+  const user = c.get("user");
+  const genderScope = await getStudentGenderScope(user.userId, user.role);
 
   const exams = await db
     .select({
@@ -83,7 +99,8 @@ studentLeavesRoute.get("/clinic-data", async (c) => {
       inArray(healthExaminations.patientId, studentIds),
       eq(healthExaminations.patientType, "student"),
       sql`${healthExaminations.examinationDate} >= ${startDate}`,
-      sql`${healthExaminations.examinationDate} <= ${endDate}`
+      sql`${healthExaminations.examinationDate} <= ${endDate}`,
+      genderScope ? eq(students.gender, genderScope) : undefined,
     ))
     .orderBy(desc(healthExaminations.examinationDate));
 

@@ -76,7 +76,7 @@
               {{ modelValue.name }}
             </div>
             <div class="text-sm text-slate-600 mt-1">
-              {{ modelValue.gender === "L" ? "Laki-laki" : "Perempuan" }} •
+              {{ modelValue.gender === "L" ? "Ikhwan" : "Akhwat" }} •
               {{ modelValue.phone || "No Phone" }}
             </div>
             <div class="text-xs text-slate-500 mt-1" v-if="modelValue.address">
@@ -157,8 +157,8 @@
             "
             class="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm"
           >
-            <option value="L">Laki-laki</option>
-            <option value="P">Perempuan</option>
+            <option value="L">Ikhwan</option>
+            <option value="P">Akhwat</option>
           </select>
         </div>
         <div>

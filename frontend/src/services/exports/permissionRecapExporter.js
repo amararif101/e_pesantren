@@ -94,7 +94,7 @@ export async function exportPermissionRecapToExcel(data, filters) {
   if (filters.gender) {
     worksheet.mergeCells(`A${r}:C${r}`);
     worksheet.getCell(`A${r}`).value = `Jenis Kelamin: ${
-      filters.gender === "male" ? "Laki-laki" : "Perempuan"
+      filters.gender === "male" ? "Ikhwan" : "Akhwat"
     }`;
     worksheet.getCell(`A${r}`).font = boldFont;
     r++;

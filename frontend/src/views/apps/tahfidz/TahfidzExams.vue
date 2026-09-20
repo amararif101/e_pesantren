@@ -108,8 +108,8 @@
               class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#602515]"
             >
               <option value="">Semua Gender</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="male">Ikhwan</option>
+              <option value="female">Akhwat</option>
             </select>
           </div>
 
@@ -561,7 +561,249 @@
                 </div>
               </div>
 
-              <!-- Penilaian - UKJ/UPK: Component Scores -->
+              <!-- Penilaian - UPK: Capaian Target + Nilai 1-4 + Tajwid -->
+              <div
+                v-else-if="selectedExamType?.category === 'UPK'"
+                class="p-4 bg-slate-50 rounded-lg border border-slate-200"
+              >
+                <h4
+                  class="font-semibold text-slate-700 mb-3 flex items-center gap-2"
+                >
+                  <Icon icon="solar:clipboard-check-line-duotone" /> Komponen
+                  Penilaian (max 100)
+                </h4>
+
+                <div class="mb-4 p-3 bg-white rounded-lg border border-slate-200">
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium text-slate-600"
+                      >Capaian Target (2 pekan terakhir)</span
+                    >
+                    <span
+                      class="text-lg font-bold"
+                      :class="getScoreColor((form.capaianTargetScore / 30) * 100)"
+                      >{{ form.capaianTargetScore }} / 30</span
+                    >
+                  </div>
+                  <p v-if="form.id" class="text-xs text-slate-400 mt-1">
+                    {{ form.capaianTargetPages || 0 }} halaman dihafal
+                    (tersimpan dari saat ujian dicatat)
+                  </p>
+                  <p v-else class="text-xs text-slate-400 mt-1">
+                    {{ form.capaianTargetPages || 0 }} halaman dihafal dari
+                    target {{ capaianTargetPagesTarget }} halaman
+                    <span v-if="!form.studentId || !form.examDate"
+                      >(pilih santri &amp; tanggal ujian dahulu)</span
+                    >
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div v-for="n in 4" :key="n">
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Nilai {{ n }} (max 15)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form[`nilai${n}`]"
+                      min="0"
+                      max="15"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Tajwid (max 10)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form.scoreTajwid"
+                      min="0"
+                      max="10"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  class="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"
+                >
+                  <span class="text-sm font-semibold text-slate-600"
+                    >Total (max 100):</span
+                  >
+                  <span
+                    class="text-2xl font-bold"
+                    :class="getScoreColor(calculatedFinalScore)"
+                    >{{ calculatedFinalScore }}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Penilaian - UKJ: Nilai 1-6 + Tajwid -->
+              <div
+                v-else-if="selectedExamType?.category === 'UKJ'"
+                class="p-4 bg-slate-50 rounded-lg border border-slate-200"
+              >
+                <h4
+                  class="font-semibold text-slate-700 mb-3 flex items-center gap-2"
+                >
+                  <Icon icon="solar:clipboard-check-line-duotone" /> Komponen
+                  Penilaian (max 100)
+                </h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div v-for="n in 6" :key="n">
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Nilai {{ n }} (max 15)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form[`nilai${n}`]"
+                      min="0"
+                      max="15"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Tajwid (max 10)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form.scoreTajwid"
+                      min="0"
+                      max="10"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  class="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"
+                >
+                  <span class="text-sm font-semibold text-slate-600"
+                    >Total (max 100):</span
+                  >
+                  <span
+                    class="text-2xl font-bold"
+                    :class="getScoreColor(calculatedFinalScore)"
+                    >{{ calculatedFinalScore }}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Penilaian - UA: Capaian Target (max 10) + Nilai 1-9 -->
+              <div
+                v-else-if="selectedExamType?.category === 'UA'"
+                class="p-4 bg-slate-50 rounded-lg border border-slate-200"
+              >
+                <h4
+                  class="font-semibold text-slate-700 mb-3 flex items-center gap-2"
+                >
+                  <Icon icon="solar:clipboard-check-line-duotone" /> Komponen
+                  Penilaian (max 100)
+                </h4>
+
+                <div class="mb-4 p-3 bg-white rounded-lg border border-slate-200">
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium text-slate-600"
+                      >Capaian Target (1 semester berjalan)</span
+                    >
+                    <span
+                      class="text-lg font-bold"
+                      :class="getScoreColor((form.capaianTargetScore / 10) * 100)"
+                      >{{ form.capaianTargetScore }} / 10</span
+                    >
+                  </div>
+                  <p v-if="form.id" class="text-xs text-slate-400 mt-1">
+                    {{ form.capaianTargetPages || 0 }} halaman dihafal
+                    (tersimpan dari saat ujian dicatat)
+                  </p>
+                  <p v-else class="text-xs text-slate-400 mt-1">
+                    {{ form.capaianTargetPages || 0 }} halaman dihafal dari
+                    target {{ capaianTargetPagesTarget }} halaman
+                    <span v-if="!form.studentId || !form.examDate"
+                      >(pilih santri &amp; tanggal ujian dahulu)</span
+                    >
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-3 md:grid-cols-5 gap-4">
+                  <div v-for="n in 9" :key="n">
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Nilai {{ n }} (max 10)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form[`nilai${n}`]"
+                      min="0"
+                      max="10"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  class="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"
+                >
+                  <span class="text-sm font-semibold text-slate-600"
+                    >Total (max 100):</span
+                  >
+                  <span
+                    class="text-2xl font-bold"
+                    :class="getScoreColor(calculatedFinalScore)"
+                    >{{ calculatedFinalScore }}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Penilaian - Jilsah/Sertifikasi: Khoto' Jali & Khofi -->
+              <div
+                v-else-if="['Jilsah', 'Sertifikasi'].includes(selectedExamType?.category)"
+                class="p-4 bg-slate-50 rounded-lg border border-slate-200"
+              >
+                <h4
+                  class="font-semibold text-slate-700 mb-3 flex items-center gap-2"
+                >
+                  <Icon icon="solar:clipboard-check-line-duotone" /> Komponen
+                  Penilaian (100 - kesalahan)
+                </h4>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Khoto' Jali (jumlah kesalahan, -1/kesalahan)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form.khotoJaliCount"
+                      min="0"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1"
+                      >Khoto' Khofi (jumlah kesalahan, -0,5/kesalahan)</label
+                    >
+                    <input
+                      type="number"
+                      v-model="form.khotoKhofiCount"
+                      min="0"
+                      class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none text-center"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  class="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center"
+                >
+                  <span class="text-sm font-semibold text-slate-600">Total:</span>
+                  <span
+                    class="text-2xl font-bold"
+                    :class="getScoreColor(calculatedFinalScore)"
+                    >{{ calculatedFinalScore }}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Penilaian - UA/Other: Component Scores (rata-rata) -->
               <div
                 v-else
                 class="p-4 bg-slate-50 rounded-lg border border-slate-200"
@@ -725,7 +967,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted } from "vue";
 import { Icon } from "@iconify/vue";
 import DataTable from "@/components/ui/DataTable.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
@@ -845,17 +1087,92 @@ const form = reactive({
   scoreTajwid: 0,
   scoreMakhraj: 0,
   scoreAdab: 0,
+  // UPK: Nilai 1-4. UKJ: Nilai 1-6. UA: Nilai 1-9 (max 10 each)
+  nilai1: 0,
+  nilai2: 0,
+  nilai3: 0,
+  nilai4: 0,
+  nilai5: 0,
+  nilai6: 0,
+  nilai7: 0,
+  nilai8: 0,
+  nilai9: 0,
+  // UPK & UA only (auto-calculated, read-only in the form)
+  capaianTargetPages: 0,
+  capaianTargetScore: 0,
+  // Jilsah & Sertifikasi
+  khotoJaliCount: 0,
+  khotoKhofiCount: 0,
   directFinalScore: 0, // For Suluk
   verdict: "pass",
   notes: "",
 });
 
+// Informational only (not submitted) — the target halaman used to compute
+// capaianTargetScore, shown next to the auto-fetched achieved pages.
+const capaianTargetPagesTarget = ref(0);
+
 const selectedExamType = computed(() => {
   return examTypesList.value.find((t) => t.id === form.examTypeId);
 });
 
-// Auto calculate final score (average)
+// UPK: Capaian Target (max 30, auto) + Nilai 1-4 (max 15 each) + Tajwid (max 10)
+const upkTotal = computed(() => {
+  const total =
+    Number(form.capaianTargetScore || 0) +
+    Number(form.nilai1 || 0) +
+    Number(form.nilai2 || 0) +
+    Number(form.nilai3 || 0) +
+    Number(form.nilai4 || 0) +
+    Number(form.scoreTajwid || 0);
+  return Math.min(100, Math.round(total));
+});
+
+// UKJ: Nilai 1-6 (max 15 each) + Tajwid (max 10) = max 100
+const ukjTotal = computed(() => {
+  const total =
+    Number(form.nilai1 || 0) +
+    Number(form.nilai2 || 0) +
+    Number(form.nilai3 || 0) +
+    Number(form.nilai4 || 0) +
+    Number(form.nilai5 || 0) +
+    Number(form.nilai6 || 0) +
+    Number(form.scoreTajwid || 0);
+  return Math.min(100, Math.round(total));
+});
+
+// UA: Capaian Target (max 10, auto) + Nilai 1-9 (max 10 each) = max 100
+const uaTotal = computed(() => {
+  const total =
+    Number(form.capaianTargetScore || 0) +
+    Number(form.nilai1 || 0) +
+    Number(form.nilai2 || 0) +
+    Number(form.nilai3 || 0) +
+    Number(form.nilai4 || 0) +
+    Number(form.nilai5 || 0) +
+    Number(form.nilai6 || 0) +
+    Number(form.nilai7 || 0) +
+    Number(form.nilai8 || 0) +
+    Number(form.nilai9 || 0);
+  return Math.min(100, Math.round(total));
+});
+
+// Jilsah & Sertifikasi: 100 - (Khoto' Jali x 1 + Khoto' Khofi x 0.5)
+const jilsahTotal = computed(() => {
+  const deduction =
+    Number(form.khotoJaliCount || 0) * 1 + Number(form.khotoKhofiCount || 0) * 0.5;
+  return Math.max(0, Math.round((100 - deduction) * 100) / 100);
+});
+
+// Auto calculate final score, formula depends on exam category
 const calculatedFinalScore = computed(() => {
+  const category = selectedExamType.value?.category;
+  if (category === "UPK") return upkTotal.value;
+  if (category === "UKJ") return ukjTotal.value;
+  if (category === "UA") return uaTotal.value;
+  if (category === "Jilsah" || category === "Sertifikasi") return jilsahTotal.value;
+
+  // Other: legacy 4-component average
   const total =
     Number(form.scoreFluency) +
     Number(form.scoreTajwid) +
@@ -863,6 +1180,38 @@ const calculatedFinalScore = computed(() => {
     Number(form.scoreAdab);
   return Math.round(total / 4);
 });
+
+// Auto-fetch "Capaian Target" (achieved pages vs target) for UPK (max 30,
+// window 2 pekan terakhir) and UA (max 10, window 1 semester berjalan).
+// Skipped while editing an existing exam so historical figures aren't
+// silently overwritten by today's deposit data.
+async function refreshCapaianTarget() {
+  const category = selectedExamType.value?.category;
+  if (
+    form.id ||
+    (category !== "UPK" && category !== "UA") ||
+    !form.studentId ||
+    !form.examDate
+  ) {
+    return;
+  }
+  try {
+    const maxScore = category === "UA" ? 10 : 30;
+    const res = await tahfidzApi.getCapaianTarget(form.studentId, form.examDate, maxScore, category);
+    if (res.success) {
+      form.capaianTargetPages = res.data.achievedPages;
+      form.capaianTargetScore = res.data.capaianTargetScore;
+      capaianTargetPagesTarget.value = res.data.targetPages;
+    }
+  } catch (e) {
+    console.error("Failed to fetch capaian target:", e);
+  }
+}
+
+watch(
+  () => [form.studentId, form.examDate, form.examTypeId],
+  () => refreshCapaianTarget(),
+);
 
 function getScoreColor(score) {
   if (score >= 90) return "text-emerald-600";
@@ -1040,9 +1389,23 @@ async function openModal() {
   form.studentId = "";
   form.examType = "";
   form.scoreFluency = 80;
-  form.scoreTajwid = 80;
+  form.scoreTajwid = 0;
   form.scoreMakhraj = 80;
   form.scoreAdab = 90;
+  form.nilai1 = 0;
+  form.nilai2 = 0;
+  form.nilai3 = 0;
+  form.nilai4 = 0;
+  form.nilai5 = 0;
+  form.nilai6 = 0;
+  form.nilai7 = 0;
+  form.nilai8 = 0;
+  form.nilai9 = 0;
+  form.capaianTargetPages = 0;
+  form.capaianTargetScore = 0;
+  form.khotoJaliCount = 0;
+  form.khotoKhofiCount = 0;
+  capaianTargetPagesTarget.value = 0;
   form.verdict = "pass";
   form.notes = "";
   studentSearch.value = ""; // Reset search input
@@ -1079,6 +1442,19 @@ async function editExam(item) {
   form.scoreTajwid = item.scoreTajwid;
   form.scoreMakhraj = item.scoreMakhraj;
   form.scoreAdab = item.scoreAdab;
+  form.nilai1 = item.nilai1 ?? 0;
+  form.nilai2 = item.nilai2 ?? 0;
+  form.nilai3 = item.nilai3 ?? 0;
+  form.nilai4 = item.nilai4 ?? 0;
+  form.nilai5 = item.nilai5 ?? 0;
+  form.nilai6 = item.nilai6 ?? 0;
+  form.nilai7 = item.nilai7 ?? 0;
+  form.nilai8 = item.nilai8 ?? 0;
+  form.nilai9 = item.nilai9 ?? 0;
+  form.capaianTargetPages = item.capaianTargetPages ?? 0;
+  form.capaianTargetScore = item.capaianTargetScore ?? 0;
+  form.khotoJaliCount = item.khotoJaliCount ?? 0;
+  form.khotoKhofiCount = item.khotoKhofiCount ?? 0;
   form.verdict = item.verdict;
   form.notes = item.notes || "";
 
@@ -1149,6 +1525,7 @@ async function submitExam() {
     const selectedType = examTypesList.value.find(
       (t) => t.id === form.examTypeId
     );
+    const category = selectedType?.category;
 
     const payload = {
       // Basic info
@@ -1168,17 +1545,52 @@ async function submitExam() {
         selectedType?.category === "UPK" ? Number(form.startPage) : null,
       endPage: selectedType?.category === "UPK" ? Number(form.endPage) : null,
 
-      // Scores - For Suluk, use direct score; for others, use component averages
-      scoreFluency:
-        selectedType?.category === "Suluk" ? 0 : Number(form.scoreFluency),
+      // Other: legacy 4-component average
+      scoreFluency: category === "Other" ? Number(form.scoreFluency) : 0,
+      scoreMakhraj: category === "Other" ? Number(form.scoreMakhraj) : 0,
+      scoreAdab: category === "Other" ? Number(form.scoreAdab) : 0,
+      // Tajwid is shared: Other (0-100) and UPK/UKJ (0-10)
       scoreTajwid:
-        selectedType?.category === "Suluk" ? 0 : Number(form.scoreTajwid),
-      scoreMakhraj:
-        selectedType?.category === "Suluk" ? 0 : Number(form.scoreMakhraj),
-      scoreAdab:
-        selectedType?.category === "Suluk" ? 0 : Number(form.scoreAdab),
+        category === "Suluk" ||
+        category === "Jilsah" ||
+        category === "Sertifikasi" ||
+        category === "UA"
+          ? 0
+          : Number(form.scoreTajwid),
+
+      // UPK: Nilai 1-4. UKJ: Nilai 1-6. UA: Nilai 1-9 (max 10 each)
+      nilai1: ["UPK", "UKJ", "UA"].includes(category) ? Number(form.nilai1) : null,
+      nilai2: ["UPK", "UKJ", "UA"].includes(category) ? Number(form.nilai2) : null,
+      nilai3: ["UPK", "UKJ", "UA"].includes(category) ? Number(form.nilai3) : null,
+      nilai4: ["UPK", "UKJ", "UA"].includes(category) ? Number(form.nilai4) : null,
+      nilai5: ["UKJ", "UA"].includes(category) ? Number(form.nilai5) : null,
+      nilai6: ["UKJ", "UA"].includes(category) ? Number(form.nilai6) : null,
+      nilai7: category === "UA" ? Number(form.nilai7) : null,
+      nilai8: category === "UA" ? Number(form.nilai8) : null,
+      nilai9: category === "UA" ? Number(form.nilai9) : null,
+
+      // UPK & UA: auto-calculated Capaian Target
+      capaianTargetPages:
+        category === "UPK" || category === "UA"
+          ? Number(form.capaianTargetPages)
+          : null,
+      capaianTargetScore:
+        category === "UPK" || category === "UA"
+          ? Number(form.capaianTargetScore)
+          : null,
+
+      // Jilsah & Sertifikasi: error counts
+      khotoJaliCount:
+        category === "Jilsah" || category === "Sertifikasi"
+          ? Number(form.khotoJaliCount)
+          : null,
+      khotoKhofiCount:
+        category === "Jilsah" || category === "Sertifikasi"
+          ? Number(form.khotoKhofiCount)
+          : null,
+
       finalScore:
-        selectedType?.category === "Suluk"
+        category === "Suluk"
           ? Number(form.directFinalScore)
           : calculatedFinalScore.value,
 

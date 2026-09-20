@@ -82,7 +82,7 @@
                         </div>
                         <div>
                           <div class="font-bold text-slate-800 group-hover:text-[#602515]">{{ student.fullName }}</div>
-                          <div class="text-xs text-slate-500 font-medium tracking-tight">{{ student.nis }} • {{ student.gender === 'male' ? 'Laki-laki' : 'Perempuan' }}</div>
+                          <div class="text-xs text-slate-500 font-medium tracking-tight">{{ student.nis }} • {{ student.gender === 'male' ? 'Ikhwan' : 'Akhwat' }}</div>
                         </div>
                       </div>
                       <div v-if="isSelected(student.id)" class="bg-[#602515]/10 p-1.5 rounded-full">

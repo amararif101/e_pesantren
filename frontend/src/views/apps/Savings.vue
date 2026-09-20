@@ -20,26 +20,20 @@
       </div>
 
       <!-- Total Deposit Card -->
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center gap-5 relative group hover:border-[#602515]/30 transition-all">
-        <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl flex-shrink-0 group-hover:scale-110 transition-transform">
-          <Icon icon="solar:card-transfer-bold-duotone" />
-        </div>
-        <div>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Setoran</p>
-          <h3 class="text-xl font-extrabold text-slate-800">{{ formatRupiah(balanceSummary.totalDeposit) }}</h3>
-        </div>
-      </div>
+      <StatCard
+        icon="solar:card-transfer-bold-duotone"
+        color="emerald"
+        label="Total Setoran"
+        :value="formatRupiah(balanceSummary.totalDeposit)"
+      />
 
       <!-- Total Withdrawal Card -->
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center gap-5 relative group hover:border-[#602515]/30 transition-all">
-        <div class="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-3xl flex-shrink-0 group-hover:scale-110 transition-transform">
-          <Icon icon="solar:card-send-bold-duotone" />
-        </div>
-        <div>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Pengambilan</p>
-          <h3 class="text-xl font-extrabold text-slate-800">{{ formatRupiah(balanceSummary.totalWithdrawal) }}</h3>
-        </div>
-      </div>
+      <StatCard
+        icon="solar:card-send-bold-duotone"
+        color="rose"
+        label="Total Pengambilan"
+        :value="formatRupiah(balanceSummary.totalWithdrawal)"
+      />
     </div>
 
     <!-- Tabs for Managers -->
@@ -1170,6 +1164,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { Icon } from "@iconify/vue";
+import StatCard from "@/components/ui/StatCard.vue";
 import DataTable from "@/components/ui/DataTable.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";

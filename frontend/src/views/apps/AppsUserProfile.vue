@@ -280,7 +280,7 @@
                       class="accent-[#602515] w-4 h-4"
                     />
                     <span class="text-sm font-semibold text-slate-700"
-                      >Laki-laki</span
+                      >Ikhwan</span
                     >
                   </label>
                   <label class="flex items-center gap-2 cursor-pointer">
@@ -291,7 +291,7 @@
                       class="accent-[#602515] w-4 h-4"
                     />
                     <span class="text-sm font-semibold text-slate-700"
-                      >Perempuan</span
+                      >Akhwat</span
                     >
                   </label>
                 </div>
@@ -633,8 +633,8 @@ const displayTanggal = computed(() => {
 });
 
 const displayGender = computed(() => {
-  if (user.value?.gender === "male") return "Laki-laki";
-  if (user.value?.gender === "female") return "Perempuan";
+  if (user.value?.gender === "male") return "Ikhwan";
+  if (user.value?.gender === "female") return "Akhwat";
   return user.value?.gender || "-";
 });
 
