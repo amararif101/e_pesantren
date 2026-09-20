@@ -34,6 +34,7 @@ import {
   updatePharmacySchema,
 } from "../validators/clinic";
 import { z } from "zod";
+import { getStudentGenderScope, clinicStudentGenderSql } from "../utils/gender-scope";
 
 const clinicRoute = new Hono();
 
@@ -56,6 +57,8 @@ clinicRoute.get("/patients/search", async (c) => {
 
     // 1. Search Students
     if (!type || type === "student") {
+      const user = c.get("user");
+      const genderScope = await getStudentGenderScope(user.userId, user.role);
       const studentResults = await db
         .select({
           id: students.id,
@@ -68,7 +71,10 @@ clinicRoute.get("/patients/search", async (c) => {
         })
         .from(students)
         .where(
-          or(like(students.fullName, `%${q}%`), like(students.nis, `%${q}%`)),
+          and(
+            or(like(students.fullName, `%${q}%`), like(students.nis, `%${q}%`)),
+            genderScope ? eq(students.gender, genderScope) : undefined,
+          ),
         )
         .limit(10);
 
@@ -252,7 +258,10 @@ async function getOrCreateClinicPatient(data: {
 // Get All Patients (Clinic Master Data)
 clinicRoute.get("/patients/all", async (c) => {
   try {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
     const all = await db.query.clinicPatients.findMany({
+      where: clinicStudentGenderSql(genderScope),
       orderBy: desc(clinicPatients.id),
       limit: 500, // Limit for performance
     });
@@ -913,9 +922,16 @@ clinicRoute.get("/inpatients", async (c) => {
       .leftJoin(clinicRooms, eq(inpatients.roomId, clinicRooms.id))
       .orderBy(desc(inpatients.admissionDate));
 
-    if (status) {
+    const inpatientUser = c.get("user");
+    const inpatientGenderScope = await getStudentGenderScope(inpatientUser.userId, inpatientUser.role);
+
+    const inpatientConditions = [];
+    if (status) inpatientConditions.push(eq(inpatients.status, status as any));
+    const inpatientGenderSql = clinicStudentGenderSql(inpatientGenderScope);
+    if (inpatientGenderSql) inpatientConditions.push(inpatientGenderSql);
+    if (inpatientConditions.length > 0) {
       // @ts-ignore
-      query.where(eq(inpatients.status, status));
+      query.where(and(...inpatientConditions));
     }
 
     const results = await query;
@@ -1114,6 +1130,11 @@ clinicRoute.get("/examinations", async (c) => {
       )
     );
   }
+
+  const examUser = c.get("user");
+  const examGenderScope = await getStudentGenderScope(examUser.userId, examUser.role);
+  const examGenderSql = clinicStudentGenderSql(examGenderScope);
+  if (examGenderSql) conditions.push(examGenderSql);
 
   let query = db
     .select({

@@ -11,6 +11,7 @@ import { students } from "../db/schema/students";
 import { teachers } from "../db/schema/teachers";
 import { tahfidzTargets } from "../db/schema/tahfidz";
 import { authMiddleware, requirePermission } from "../middleware/auth";
+import { getStudentGenderScope } from "../utils/gender-scope";
 import {
   createHalaqahSchema,
   updateHalaqahSchema,
@@ -367,9 +368,15 @@ halaqahRoute.get("/:id/members", async (c) => {
       }),
     );
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const visibleMembers = genderScope
+      ? membersWithDetails.filter((m) => m.student?.gender === genderScope)
+      : membersWithDetails;
+
     return c.json({
       success: true,
-      data: membersWithDetails,
+      data: visibleMembers,
     });
   } catch (error) {
     console.error("Get halaqah members error:", error);

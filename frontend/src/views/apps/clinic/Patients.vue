@@ -42,8 +42,8 @@
               class="w-full border border-slate-200 rounded-lg text-sm px-3 py-2"
             >
               <option value="">Semua</option>
-              <option value="L">Laki-laki</option>
-              <option value="P">Perempuan</option>
+              <option value="L">Ikhwan</option>
+              <option value="P">Akhwat</option>
             </select>
           </div>
           <div class="pt-2 flex justify-end">
@@ -330,8 +330,8 @@
                   v-model="form.gender"
                   class="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm"
                 >
-                  <option value="L">Laki-laki</option>
-                  <option value="P">Perempuan</option>
+                  <option value="L">Ikhwan</option>
+                  <option value="P">Akhwat</option>
                 </select>
               </div>
             </div>
@@ -476,7 +476,7 @@
                     {{ historyModal.patient?.name }}
                   </h4>
                   <p class="text-xs text-slate-500 mt-1">
-                    {{ historyModal.patient?.gender === 'P' ? 'Perempuan' : 'Laki-laki' }} • 
+                    {{ historyModal.patient?.gender === 'P' ? 'Akhwat' : 'Ikhwan' }} •
                     {{ historyModal.patient?.age && historyModal.patient?.age !== '-' ? `${historyModal.patient?.age} Tahun` : '-' }}
                   </p>
                 </div>

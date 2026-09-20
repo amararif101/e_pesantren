@@ -108,8 +108,8 @@
               class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#602515]"
             >
               <option value="">Semua Gender</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="male">Ikhwan</option>
+              <option value="female">Akhwat</option>
             </select>
           </div>
 
@@ -705,7 +705,7 @@
                 <div class="mb-4 p-3 bg-white rounded-lg border border-slate-200">
                   <div class="flex justify-between items-center">
                     <span class="text-sm font-medium text-slate-600"
-                      >Capaian Target (2 pekan terakhir)</span
+                      >Capaian Target (1 semester berjalan)</span
                     >
                     <span
                       class="text-lg font-bold"
@@ -1181,10 +1181,10 @@ const calculatedFinalScore = computed(() => {
   return Math.round(total / 4);
 });
 
-// Auto-fetch "Capaian Target" (achieved pages vs target, last 2 weeks) for
-// UPK (max 30) and UA (max 10, same formula). Skipped while editing an
-// existing exam so historical figures aren't silently overwritten by
-// today's deposit data.
+// Auto-fetch "Capaian Target" (achieved pages vs target) for UPK (max 30,
+// window 2 pekan terakhir) and UA (max 10, window 1 semester berjalan).
+// Skipped while editing an existing exam so historical figures aren't
+// silently overwritten by today's deposit data.
 async function refreshCapaianTarget() {
   const category = selectedExamType.value?.category;
   if (
@@ -1197,7 +1197,7 @@ async function refreshCapaianTarget() {
   }
   try {
     const maxScore = category === "UA" ? 10 : 30;
-    const res = await tahfidzApi.getCapaianTarget(form.studentId, form.examDate, maxScore);
+    const res = await tahfidzApi.getCapaianTarget(form.studentId, form.examDate, maxScore, category);
     if (res.success) {
       form.capaianTargetPages = res.data.achievedPages;
       form.capaianTargetScore = res.data.capaianTargetScore;

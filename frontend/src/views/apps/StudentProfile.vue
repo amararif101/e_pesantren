@@ -256,7 +256,7 @@
                     "
                     class="text-slate-400"
                   />
-                  {{ student.gender === "female" ? "Perempuan" : "Laki-laki" }}
+                  {{ student.gender === "female" ? "Akhwat" : "Ikhwan" }}
                 </div>
               </div>
               <div>
@@ -1546,7 +1546,7 @@
                       value="male"
                       class="text-[#602515] focus:ring-[#602515]"
                     />
-                    <span class="text-sm">Laki-laki</span>
+                    <span class="text-sm">Ikhwan</span>
                   </label>
                   <label class="flex items-center gap-2">
                     <input
@@ -1555,7 +1555,7 @@
                       value="female"
                       class="text-[#602515] focus:ring-[#602515]"
                     />
-                    <span class="text-sm">Perempuan</span>
+                    <span class="text-sm">Akhwat</span>
                   </label>
                 </div>
               </div>

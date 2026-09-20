@@ -110,8 +110,8 @@
               class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100"
             >
               <option value="">Semua Gender</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="male">Ikhwan</option>
+              <option value="female">Akhwat</option>
             </select>
           </div>
         </div>

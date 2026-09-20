@@ -1168,8 +1168,8 @@
               <td>
                 {{
                   printData.gender === "P" || printData.patientGender === "P"
-                    ? "Perempuan"
-                    : "Laki-laki"
+                    ? "Akhwat"
+                    : "Ikhwan"
                 }}
               </td>
             </tr>

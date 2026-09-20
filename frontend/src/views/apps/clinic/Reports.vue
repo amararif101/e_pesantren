@@ -39,8 +39,8 @@
           class="text-sm border-none focus:ring-0 text-slate-600 bg-transparent"
         >
           <option value="">Semua JK</option>
-          <option value="L">Laki-laki</option>
-          <option value="P">Perempuan</option>
+          <option value="L">Ikhwan</option>
+          <option value="P">Akhwat</option>
         </select>
         <button
           @click="fetchReports"

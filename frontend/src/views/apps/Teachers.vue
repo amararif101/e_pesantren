@@ -370,7 +370,7 @@
                           v-model="form.gender"
                           class="text-[#602515] focus:ring-[#602515]"
                         />
-                        Laki-laki
+                        Ikhwan
                       </label>
                       <label
                         class="flex items-center gap-2 text-sm cursor-pointer"
@@ -381,7 +381,7 @@
                           v-model="form.gender"
                           class="text-[#602515] focus:ring-[#602515]"
                         />
-                        Perempuan
+                        Akhwat
                       </label>
                     </div>
                   </div>
@@ -1121,7 +1121,7 @@ const teacherImportTemplate = [
     "Nama Lengkap": "Contoh Guru",
     Jabatan: "Wali Kelas",
     Divisi: "Akademik",
-    "Jenis Kelamin": "Laki-laki",
+    "Jenis Kelamin": "Ikhwan",
     "Tanggal Lahir": "1990-01-01",
     "Tempat Lahir": "Jakarta",
     // Field Alamat Terpisah

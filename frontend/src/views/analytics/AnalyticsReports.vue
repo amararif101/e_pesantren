@@ -298,7 +298,7 @@
             </h3>
             <div class="h-64">
               <DoughnutChart
-                :labels="['Guru', 'Staf', 'Laki-laki', 'Perempuan']"
+                :labels="['Guru', 'Staf', 'Ikhwan', 'Akhwat']"
                 :datasets="[
                   {
                     backgroundColor: [
@@ -357,14 +357,14 @@
                 :labels="Object.keys(recapData.siswa.byClassAndGender)"
                 :datasets="[
                   {
-                    label: 'Laki-laki',
+                    label: 'Ikhwan',
                     backgroundColor: '#3b82f6',
                     data: Object.values(recapData.siswa.byClassAndGender).map(
                       (d) => d.male,
                     ),
                   },
                   {
-                    label: 'Perempuan',
+                    label: 'Akhwat',
                     backgroundColor: '#ec4899',
                     data: Object.values(recapData.siswa.byClassAndGender).map(
                       (d) => d.female,

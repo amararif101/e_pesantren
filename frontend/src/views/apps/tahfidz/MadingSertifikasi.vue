@@ -82,8 +82,8 @@
             @change="loadReport"
           >
             <option value="">Semua</option>
-            <option value="male">Laki-laki</option>
-            <option value="female">Perempuan</option>
+            <option value="male">Ikhwan</option>
+            <option value="female">Akhwat</option>
           </select>
         </div>
       </div>

@@ -42,6 +42,7 @@ import {
   studentWarnings,
 } from "../db/schema/rewards-punishments";
 import { teachers } from "../db/schema/teachers";
+import { getStudentGenderScope, requireStudentGenderAccess } from "../utils/gender-scope";
 
 const studentsRoute = new Hono();
 
@@ -106,7 +107,12 @@ studentsRoute.get("/", async (c) => {
     if (fullName) {
       conditions.push(sql`${students.fullName} LIKE ${`%${fullName}%`}`);
     }
-    if (gender) {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    if (genderScope) {
+      // Guru only sees their own gender, regardless of the requested filter
+      conditions.push(eq(students.gender, genderScope));
+    } else if (gender) {
       conditions.push(eq(students.gender, gender as "male" | "female"));
     }
     if (status) {
@@ -310,9 +316,11 @@ studentsRoute.post(
 
       const genderMapping: { [key: string]: string } = {
         "Laki-laki": "male",
+        Ikhwan: "male",
         L: "male",
         Male: "male",
         Perempuan: "female",
+        Akhwat: "female",
         P: "female",
         Female: "female",
       };
@@ -569,9 +577,11 @@ studentsRoute.post("/import", requirePermission("/apps/students"), async (c) => 
 
     const genderMapping: { [key: string]: string } = {
       "Laki-laki": "male",
+      Ikhwan: "male",
       L: "male",
       Male: "male",
       Perempuan: "female",
+      Akhwat: "female",
       P: "female",
       Female: "female",
     };
@@ -845,6 +855,9 @@ studentsRoute.get("/:id/timeline", async (c) => {
     if (!student) {
       return c.json({ success: false, message: "Student not found" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, student.gender);
+    if (denied) return denied;
 
     const [
       currentClass,
@@ -1342,6 +1355,9 @@ studentsRoute.get("/:id", async (c) => {
       return c.json({ success: false, message: "Student not found" }, 404);
     }
 
+    const denied = await requireStudentGenderAccess(c, student.gender);
+    if (denied) return denied;
+
     // Get enriched data (Halaqah, Room, Class)
     const { halaqahMembers, halaqahGroups } =
       await import("../db/schema/halaqah");
@@ -1647,6 +1663,9 @@ import {
 studentsRoute.get("/:id/parents", async (c) => {
   try {
     const studentId = parseInt(c.req.param("id"));
+
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
 
     const relations = await db.query.studentParents.findMany({
       where: eq(studentParents.studentId, studentId),

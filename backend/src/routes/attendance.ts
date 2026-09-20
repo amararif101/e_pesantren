@@ -11,6 +11,7 @@ import { teachers } from "../db/schema/teachers";
 import { teacherDivisions, divisions } from "../db/schema/divisions";
 import { settings } from "../db/schema/settings";
 import { authMiddleware, requirePermission } from "../middleware/auth";
+import { getStudentGenderScope, getAllowedStudentIds } from "../utils/gender-scope";
 import {
   createStudentAttendanceSchema,
   bulkStudentAttendanceSchema,
@@ -188,6 +189,16 @@ attendanceRoute.get("/students", async (c) => {
         console.error("Error fetching class students:", classError);
         throw classError;
       }
+    }
+
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    if (genderScope) {
+      const allowedIds = await getAllowedStudentIds(genderScope);
+      if (!allowedIds || allowedIds.length === 0) {
+        return c.json({ success: true, data: [] });
+      }
+      conditions.push(inArray(studentAttendances.studentId, allowedIds));
     }
 
     console.log("Fetching attendances with conditions:", conditions.length);

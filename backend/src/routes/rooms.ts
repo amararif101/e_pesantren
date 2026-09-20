@@ -13,6 +13,7 @@ import {
   updateSupervisorSchema,
   assignStudentRoomSchema,
 } from "../validators/rooms";
+import { getStudentGenderScope } from "../utils/gender-scope";
 
 const roomsRoute = new Hono();
 
@@ -60,8 +61,12 @@ roomsRoute.get("/:id", async (c) => {
     }
 
     // Get students in this room
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
     const roomStudents = await db.query.students.findMany({
-      where: eq(students.roomId, id),
+      where: genderScope
+        ? and(eq(students.roomId, id), eq(students.gender, genderScope))
+        : eq(students.roomId, id),
     });
 
     // Get supervisors
@@ -209,8 +214,12 @@ roomsRoute.get("/:id/students", async (c) => {
   try {
     const roomId = parseInt(c.req.param("id"));
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
     const roomStudents = await db.query.students.findMany({
-      where: eq(students.roomId, roomId),
+      where: genderScope
+        ? and(eq(students.roomId, roomId), eq(students.gender, genderScope))
+        : eq(students.roomId, roomId),
     });
 
     return c.json({

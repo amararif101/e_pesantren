@@ -11,6 +11,11 @@ import {
   reportCardPredicates,
 } from "../db/schema/academic";
 import { authMiddleware, requirePermission } from "../middleware/auth";
+import { students } from "../db/schema/students";
+import {
+  getStudentGenderScope,
+  requireStudentGenderAccess,
+} from "../utils/gender-scope";
 import {
   createClassSchema,
   updateClassSchema,
@@ -185,8 +190,12 @@ academicRoute.get("/classes/:id", async (c) => {
     const { students } = await import("../db/schema/students");
     const { teachers } = await import("../db/schema/teachers");
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
     const classStudents = await db.query.students.findMany({
-      where: eq(students.classId, id),
+      where: genderScope
+        ? and(eq(students.classId, id), eq(students.gender, genderScope))
+        : eq(students.classId, id),
     });
 
     // Get homeroom teacher details (legacy column)
@@ -1106,6 +1115,9 @@ academicRoute.get("/grades/student/:studentId", async (c) => {
     const academicYear = c.req.query("academicYear");
     const semester = c.req.query("semester");
 
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
+
     let conditions = [eq(grades.studentId, studentId)];
     if (academicYear) conditions.push(eq(grades.academicYear, academicYear));
     if (semester) conditions.push(eq(grades.semester, parseInt(semester)));
@@ -1366,6 +1378,9 @@ academicRoute.get("/grades", async (c) => {
       return c.json({ success: false, message: "Student not found" }, 404);
     }
 
+    const denied = await requireStudentGenderAccess(c, student.gender);
+    if (denied) return denied;
+
     // Get class to find grade level
     let gradeLevel: number | null = null;
     if (student.classId) {
@@ -1475,9 +1490,14 @@ academicRoute.get(
 
       const { students } = await import("../db/schema/students");
 
+      const user = c.get("user");
+      const genderScope = await getStudentGenderScope(user.userId, user.role);
+
       // 1. Get all students in class
       const classStudents = await db.query.students.findMany({
-        where: eq(students.classId, Number(classId)),
+        where: genderScope
+          ? and(eq(students.classId, Number(classId)), eq(students.gender, genderScope))
+          : eq(students.classId, Number(classId)),
         orderBy: (students, { asc }) => [asc(students.fullName)],
       });
 
@@ -1663,6 +1683,10 @@ academicRoute.post(
 academicRoute.get("/reports/student/:studentId", async (c) => {
   try {
     const studentId = parseInt(c.req.param("studentId"));
+
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
+
     const studentReports = await db.query.reports.findMany({
       where: eq(reports.studentId, studentId),
     });
@@ -1688,6 +1712,9 @@ academicRoute.get("/reports/:id", async (c) => {
     if (!report) {
       return c.json({ success: false, message: "Report not found" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, report.studentId);
+    if (denied) return denied;
 
     return c.json({
       success: true,

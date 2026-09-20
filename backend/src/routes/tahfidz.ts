@@ -23,6 +23,11 @@ import {
   studentLeaveItems,
 } from "../db/schema";
 import {
+  getStudentGenderScope,
+  getAllowedStudentIds,
+  requireStudentGenderAccess,
+} from "../utils/gender-scope";
+import {
   eq,
   desc,
   and,
@@ -319,7 +324,12 @@ app.get("/deposits", async (c) => {
       conditions.push(sql`DATE(${tahfidzDeposits.depositDate}) <= ${endDate}`);
     }
 
-    if (gender) {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    if (genderScope) {
+      // Guru only sees their own gender, regardless of the requested filter
+      conditions.push(eq(students.gender, genderScope));
+    } else if (gender) {
       conditions.push(eq(students.gender, gender as "male" | "female"));
     }
 
@@ -644,7 +654,14 @@ app.get("/exams", async (c) => {
     if (endDate)
       conditions.push(sql`DATE(${tahfidzExams.examDate}) <= ${endDate}`);
     if (verdict) conditions.push(eq(tahfidzExams.verdict, verdict as any));
-    if (gender) conditions.push(eq(students.gender, gender as any));
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    if (genderScope) {
+      // Guru only sees their own gender, regardless of the requested filter
+      conditions.push(eq(students.gender, genderScope));
+    } else if (gender) {
+      conditions.push(eq(students.gender, gender as any));
+    }
     if (examinerId)
       conditions.push(eq(tahfidzExams.examinerId, Number(examinerId)));
     if (academicYear)
@@ -883,12 +900,14 @@ app.put("/exams/:id", zValidator("json", examSchema), async (c) => {
   }
 });
 
-// GET /capaian-target/:studentId - Halaman dihafal 2 pekan terakhir vs target,
-// dipakai untuk komponen "Capaian Target" di penilaian Ujian Pekanan (UPK)
+// GET /capaian-target/:studentId - Halaman dihafal vs target, dipakai untuk
+// komponen "Capaian Target" di penilaian Ujian Pekanan (UPK, window 2 pekan)
+// dan Ujian Akhir (UA, window 1 semester berjalan)
 app.get("/capaian-target/:studentId", async (c) => {
   const studentId = parseInt(c.req.param("studentId"));
   const examDateStr = c.req.query("examDate") || new Date().toISOString().split("T")[0];
   const maxScore = Number(c.req.query("maxScore")) || 30; // UPK: 30, UA: 10
+  const category = c.req.query("category"); // "UA" => window 1 semester
 
   try {
     const student = await db.query.students.findFirst({
@@ -899,6 +918,9 @@ app.get("/capaian-target/:studentId", async (c) => {
     if (!student) {
       return c.json({ success: false, message: "Santri tidak ditemukan" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, student.gender);
+    if (denied) return denied;
 
     const halaqahMember = await db.query.halaqahMembers.findFirst({
       where: and(
@@ -954,12 +976,26 @@ app.get("/capaian-target/:studentId", async (c) => {
 
     if (!target) target = allTargets[0] || ({ targetPages: 50, level: "Default" } as any);
 
-    const targetPages = target.targetPages || 50;
-
-    // Achieved: pages memorized (Taqdim) in the 14 days ending at examDate
+    const baseTargetPages = target.targetPages || 50;
     const examDate = new Date(examDateStr);
-    const startWindow = new Date(examDate);
-    startWindow.setDate(startWindow.getDate() - 13);
+
+    let targetPages: number;
+    let startWindow: Date;
+
+    if (category === "UA") {
+      // UA: window 1 semester berjalan (Jul-Des atau Jan-Jun) s.d. examDate,
+      // target = target bulanan x 6 bulan (sama seperti perhitungan report-card)
+      const isGenapSemester = examDate.getMonth() < 6; // Jan(0)-Jun(5)
+      startWindow = isGenapSemester
+        ? new Date(examDate.getFullYear(), 0, 1)
+        : new Date(examDate.getFullYear(), 6, 1);
+      targetPages = baseTargetPages * 6;
+    } else {
+      // UPK: window 14 hari terakhir s.d. examDate
+      startWindow = new Date(examDate);
+      startWindow.setDate(startWindow.getDate() - 13);
+      targetPages = baseTargetPages;
+    }
 
     const recentDeposits = await db
       .select({ totalPages: tahfidzDeposits.totalPages })
@@ -1135,11 +1171,19 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     const trendStartStr = trendStart.toISOString().split("T")[0];
 
     // 1. Active halaqah groups with mentors and members
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedStudentIds = await getAllowedStudentIds(genderScope);
     const groups = await db.query.halaqahGroups.findMany({
       where: eq(halaqahGroups.status, "active"),
       with: {
         mentors: { where: eq(halaqahMentors.status, "active"), with: { teacher: true } },
-        members: { where: eq(halaqahMembers.status, "active"), with: { student: true } },
+        members: {
+          where: allowedStudentIds
+            ? and(eq(halaqahMembers.status, "active"), inArray(halaqahMembers.studentId, allowedStudentIds))
+            : eq(halaqahMembers.status, "active"),
+          with: { student: true },
+        },
         targetLevel: true,
       },
     });
@@ -1792,8 +1836,12 @@ app.get("/sertifikasi-report", async (c) => {
         ),
       );
 
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const effectiveGender = genderScope || gender;
+
     const filteredMembers = members.filter((m) => {
-      if (gender && m.gender !== gender) return false;
+      if (effectiveGender && m.gender !== effectiveGender) return false;
       if (classId && String(m.classId) !== String(classId)) return false;
       return true;
     });
@@ -1910,8 +1958,11 @@ app.get("/halaqah-report", async (c) => {
     const members = await membersQuery;
 
     // Filter by gender and/or class if provided
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const effectiveGender = genderScope || gender;
     const filteredMembers = members.filter((m) => {
-      if (gender && m.gender !== gender) return false;
+      if (effectiveGender && m.gender !== effectiveGender) return false;
       if (classId && String(m.classId) !== String(classId)) return false;
       return true;
     });
@@ -2230,6 +2281,9 @@ app.get("/report-card/:studentId", async (c) => {
     if (!student) {
       return c.json({ success: false, message: "Santri tidak ditemukan" }, 404);
     }
+
+    const denied = await requireStudentGenderAccess(c, student.gender);
+    if (denied) return denied;
 
     // Get Active Halaqah
     const halaqahMember = await db.query.halaqahMembers.findFirst({

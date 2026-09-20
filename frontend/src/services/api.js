@@ -1797,10 +1797,11 @@ export const tahfidzApi = {
       method: "DELETE",
     });
   },
-  async getCapaianTarget(studentId, examDate, maxScore) {
+  async getCapaianTarget(studentId, examDate, maxScore, category) {
     const maxScoreParam = maxScore ? `&maxScore=${maxScore}` : "";
+    const categoryParam = category ? `&category=${category}` : "";
     return request(
-      `/api/tahfidz/capaian-target/${studentId}?examDate=${examDate}${maxScoreParam}`
+      `/api/tahfidz/capaian-target/${studentId}?examDate=${examDate}${maxScoreParam}${categoryParam}`
     );
   },
   async getHalaqahDailySummary(groupId, date) {

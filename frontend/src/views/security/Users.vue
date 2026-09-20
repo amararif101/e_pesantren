@@ -536,7 +536,7 @@
                                 value="male"
                                 class="text-primary-600 focus:ring-primary-500"
                               />
-                              <span class="text-sm">Laki-laki</span>
+                              <span class="text-sm">Ikhwan</span>
                             </label>
                             <label
                               class="flex items-center gap-2 cursor-pointer"
@@ -547,7 +547,7 @@
                                 value="female"
                                 class="text-primary-600 focus:ring-primary-500"
                               />
-                              <span class="text-sm">Perempuan</span>
+                              <span class="text-sm">Akhwat</span>
                             </label>
                           </div>
                         </div>

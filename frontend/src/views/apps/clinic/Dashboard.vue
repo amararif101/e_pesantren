@@ -341,7 +341,7 @@
                     {{ historyModal.patient?.name }}
                   </h4>
                   <p class="text-xs text-slate-500 mt-1">
-                    {{ historyModal.patient?.gender === 'P' ? 'Perempuan' : 'Laki-laki' }} • 
+                    {{ historyModal.patient?.gender === 'P' ? 'Akhwat' : 'Ikhwan' }} •
                     {{ historyModal.patient?.age && historyModal.patient?.age !== '-' ? `${historyModal.patient?.age} Tahun` : '-' }}
                   </p>
                 </div>
