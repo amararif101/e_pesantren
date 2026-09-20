@@ -1102,16 +1102,16 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     const studentIds = validMembers.map((m) => m.studentId);
 
     // 2. Get deposits for these students on the specific date
-    const startDate = new Date(`${dateStr}T00:00:00`);
-    const endDate = new Date(`${dateStr}T23:59:59`);
+    const startStr = `${dateStr} 00:00:00`;
+    const endStr = `${dateStr} 23:59:59`;
     const deposits = await db
       .select()
       .from(tahfidzDeposits)
       .where(
         and(
           inArray(tahfidzDeposits.studentId, studentIds),
-          gte(tahfidzDeposits.depositDate, startDate),
-          lte(tahfidzDeposits.depositDate, endDate),
+          sql`${tahfidzDeposits.depositDate} >= ${startStr}`,
+          sql`${tahfidzDeposits.depositDate} <= ${endStr}`,
         ),
       );
 
@@ -1283,8 +1283,8 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     }));
 
     // 3-5. Deposits for the selected date across every active tahfidz student
-    const startDate = new Date(`${dateStr}T00:00:00`);
-    const endDate = new Date(`${dateStr}T23:59:59`);
+    const dayStartStr = `${dateStr} 00:00:00`;
+    const dayEndStr = `${dateStr} 23:59:59`;
     const dayDeposits = activeStudentIds.length
       ? await db
           .select()
@@ -1292,8 +1292,8 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
           .where(
             and(
               inArray(tahfidzDeposits.studentId, activeStudentIds),
-              gte(tahfidzDeposits.depositDate, startDate),
-              lte(tahfidzDeposits.depositDate, endDate),
+              sql`${tahfidzDeposits.depositDate} >= ${dayStartStr}`,
+              sql`${tahfidzDeposits.depositDate} <= ${dayEndStr}`,
             ),
           )
       : [];
