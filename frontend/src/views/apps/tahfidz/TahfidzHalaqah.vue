@@ -1140,13 +1140,17 @@ async function loadDateData() {
       selectedDate.value,
     );
     if (res.success) {
-      students.value = res.data;
+      students.value = res.data || [];
+    } else {
+      students.value = [];
+      console.warn("[TahfidzHalaqah] Failed to load daily summary:", res.message);
     }
     // Also refresh monthly stats if we just saved data, but simpler to just call it when month changes
     // calling it here ensures if we add data today, the circle updates
     loadMonthlyStats();
   } catch (e) {
-    console.error(e);
+    students.value = [];
+    console.error("[TahfidzHalaqah] Error loading date data:", e);
   } finally {
     loading.value = false;
   }

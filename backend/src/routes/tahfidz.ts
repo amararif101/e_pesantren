@@ -26,6 +26,7 @@ import {
   getStudentGenderScope,
   getAllowedStudentIds,
   requireStudentGenderAccess,
+  isStudentGenderAllowed,
 } from "../utils/gender-scope";
 import {
   eq,
@@ -1091,7 +1092,20 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       return c.json({ success: true, data: [] });
     }
 
-    const studentIds = members.map((m) => m.studentId);
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+
+    // Filter members: ensure student exists and is allowed by gender scope
+    const validMembers = members.filter((m) => {
+      if (!m.student) return false;
+      return isStudentGenderAllowed(m.student.gender, genderScope);
+    });
+
+    if (!validMembers.length) {
+      return c.json({ success: true, data: [] });
+    }
+
+    const studentIds = validMembers.map((m) => m.studentId);
 
     // 2. Get deposits for these students on the specific date
     const deposits = await db.query.tahfidzDeposits.findMany({
@@ -1107,7 +1121,7 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     // day-level exceptions (a student marked absent normally won't also have
     // a hafalan entry that day).
     const summary = await Promise.all(
-      members.map(async (m) => {
+      validMembers.map(async (m) => {
         const studentDeposits = deposits.filter(
           (d) => d.studentId === m.studentId,
         );
@@ -1139,7 +1153,7 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       data: summary,
       meta: {
         date: dateStr,
-        totalStudents: members.length,
+        totalStudents: validMembers.length,
         totalDone: deposits.length,
       },
     });
