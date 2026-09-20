@@ -26,6 +26,7 @@ import {
   getStudentGenderScope,
   getAllowedStudentIds,
   requireStudentGenderAccess,
+  isStudentGenderAllowed,
 } from "../utils/gender-scope";
 import {
   eq,
@@ -1091,15 +1092,28 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       return c.json({ success: true, data: [] });
     }
 
-    const studentIds = members.map((m) => m.studentId);
+    // Filter members: ensure student record exists
+    const validMembers = members.filter((m) => m.student != null);
+
+    if (!validMembers.length) {
+      return c.json({ success: true, data: [] });
+    }
+
+    const studentIds = validMembers.map((m) => m.studentId);
 
     // 2. Get deposits for these students on the specific date
-    const deposits = await db.query.tahfidzDeposits.findMany({
-      where: and(
-        inArray(tahfidzDeposits.studentId, studentIds),
-        sql`DATE(${tahfidzDeposits.depositDate}) = ${dateStr}`,
-      ),
-    });
+    const startStr = `${dateStr} 00:00:00`;
+    const endStr = `${dateStr} 23:59:59`;
+    const deposits = await db
+      .select()
+      .from(tahfidzDeposits)
+      .where(
+        and(
+          inArray(tahfidzDeposits.studentId, studentIds),
+          sql`${tahfidzDeposits.depositDate} >= ${startStr}`,
+          sql`${tahfidzDeposits.depositDate} <= ${endStr}`,
+        ),
+      );
 
     // 3. Map students to their status
     // Taqdim (ziyadah), Sabqi, and Manzil are independent per day: a student
@@ -1107,7 +1121,7 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     // day-level exceptions (a student marked absent normally won't also have
     // a hafalan entry that day).
     const summary = await Promise.all(
-      members.map(async (m) => {
+      validMembers.map(async (m) => {
         const studentDeposits = deposits.filter(
           (d) => d.studentId === m.studentId,
         );
@@ -1139,7 +1153,7 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       data: summary,
       meta: {
         date: dateStr,
-        totalStudents: members.length,
+        totalStudents: validMembers.length,
         totalDone: deposits.length,
       },
     });
@@ -1269,13 +1283,19 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     }));
 
     // 3-5. Deposits for the selected date across every active tahfidz student
+    const dayStartStr = `${dateStr} 00:00:00`;
+    const dayEndStr = `${dateStr} 23:59:59`;
     const dayDeposits = activeStudentIds.length
-      ? await db.query.tahfidzDeposits.findMany({
-          where: and(
-            inArray(tahfidzDeposits.studentId, activeStudentIds),
-            sql`DATE(${tahfidzDeposits.depositDate}) = ${dateStr}`,
-          ),
-        })
+      ? await db
+          .select()
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              sql`${tahfidzDeposits.depositDate} >= ${dayStartStr}`,
+              sql`${tahfidzDeposits.depositDate} <= ${dayEndStr}`,
+            ),
+          )
       : [];
     const depositsByStudent = new Map();
     dayDeposits.forEach((d) => {

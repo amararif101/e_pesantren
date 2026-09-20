@@ -1,4 +1,4 @@
-import { eq, sql, type SQL } from "drizzle-orm";
+import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Context } from "hono";
 import { db } from "../db";
 import { teachers, students } from "../db/schema";
@@ -16,7 +16,11 @@ export async function getStudentGenderScope(
   const teacher = await db.query.teachers.findFirst({
     where: eq(teachers.userId, userId),
   });
-  return (teacher?.gender as GenderScope) || null;
+  if (!teacher || !teacher.gender) return null;
+  const g = String(teacher.gender).toLowerCase();
+  if (g === "male" || g === "l" || g === "laki-laki" || g === "ikhwan") return "male";
+  if (g === "female" || g === "p" || g === "perempuan" || g === "akhwat") return "female";
+  return null;
 }
 
 // For endpoints that can't add `eq(students.gender, scope)` directly to
@@ -26,10 +30,16 @@ export async function getAllowedStudentIds(
   scope: GenderScope,
 ): Promise<number[] | null> {
   if (!scope) return null;
+  const allowedGenders =
+    scope === "male"
+      ? ["male", "L", "Laki-laki", "Ikhwan", "l", "laki-laki", "ikhwan"]
+      : ["female", "P", "Perempuan", "Akhwat", "p", "perempuan", "akhwat"];
   const rows = await db
     .select({ id: students.id })
     .from(students)
-    .where(eq(students.gender, scope));
+    .where(
+      sql`(${inArray(students.gender, allowedGenders as any)} OR ${students.gender} IS NULL)`,
+    );
   return rows.map((r) => r.id);
 }
 
@@ -38,7 +48,16 @@ export function isStudentGenderAllowed(
   studentGender: string | null | undefined,
   scope: GenderScope,
 ): boolean {
-  return !scope || studentGender === scope;
+  if (!scope) return true;
+  if (!studentGender) return true;
+  const s = String(studentGender).toLowerCase();
+  if (scope === "male") {
+    return s === "male" || s === "l" || s === "laki-laki" || s === "ikhwan";
+  }
+  if (scope === "female") {
+    return s === "female" || s === "p" || s === "perempuan" || s === "akhwat";
+  }
+  return s === scope.toLowerCase();
 }
 
 // Single-student access guard: pass a studentId to fetch-and-check, or the
