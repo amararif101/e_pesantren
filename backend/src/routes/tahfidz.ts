@@ -26,7 +26,6 @@ import {
   getStudentGenderScope,
   getAllowedStudentIds,
   requireStudentGenderAccess,
-  isStudentGenderAllowed,
 } from "../utils/gender-scope";
 import {
   eq,

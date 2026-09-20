@@ -11,7 +11,6 @@ import { students } from "../db/schema/students";
 import { teachers } from "../db/schema/teachers";
 import { tahfidzTargets } from "../db/schema/tahfidz";
 import { authMiddleware, requirePermission } from "../middleware/auth";
-import { getStudentGenderScope, isStudentGenderAllowed } from "../utils/gender-scope";
 import {
   createHalaqahSchema,
   updateHalaqahSchema,

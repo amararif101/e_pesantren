@@ -54,10 +54,7 @@ export function isStudentGenderAllowed(
   if (scope === "male") {
     return s === "male" || s === "l" || s === "laki-laki" || s === "ikhwan";
   }
-  if (scope === "female") {
-    return s === "female" || s === "p" || s === "perempuan" || s === "akhwat";
-  }
-  return s === scope.toLowerCase();
+  return s === "female" || s === "p" || s === "perempuan" || s === "akhwat";
 }
 
 // Single-student access guard: pass a studentId to fetch-and-check, or the
