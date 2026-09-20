@@ -85,7 +85,7 @@
 
     <div class="grid grid-cols-1 md:grid-cols-[minmax(300px,1fr)_2fr] gap-6">
       <!-- Calendar Sidebar -->
-      <div class="sticky top-6 self-start">
+      <div class="md:sticky md:top-6 md:self-start">
         <div
           class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm"
           @touchstart="onTouchStart"
