@@ -1108,15 +1108,18 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
     const studentIds = validMembers.map((m) => m.studentId);
 
     // 2. Get deposits for these students on the specific date
-    const startOfDay = `${dateStr} 00:00:00`;
-    const endOfDay = `${dateStr} 23:59:59`;
-    const deposits = await db.query.tahfidzDeposits.findMany({
-      where: and(
-        inArray(tahfidzDeposits.studentId, studentIds),
-        sql`${tahfidzDeposits.depositDate} >= ${startOfDay}`,
-        sql`${tahfidzDeposits.depositDate} <= ${endOfDay}`,
-      ),
-    });
+    const startDate = new Date(`${dateStr}T00:00:00`);
+    const endDate = new Date(`${dateStr}T23:59:59`);
+    const deposits = await db
+      .select()
+      .from(tahfidzDeposits)
+      .where(
+        and(
+          inArray(tahfidzDeposits.studentId, studentIds),
+          gte(tahfidzDeposits.depositDate, startDate),
+          lte(tahfidzDeposits.depositDate, endDate),
+        ),
+      );
 
     // 3. Map students to their status
     // Taqdim (ziyadah), Sabqi, and Manzil are independent per day: a student
@@ -1286,16 +1289,19 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     }));
 
     // 3-5. Deposits for the selected date across every active tahfidz student
-    const dayStartStr = `${dateStr} 00:00:00`;
-    const dayEndStr = `${dateStr} 23:59:59`;
+    const startDate = new Date(`${dateStr}T00:00:00`);
+    const endDate = new Date(`${dateStr}T23:59:59`);
     const dayDeposits = activeStudentIds.length
-      ? await db.query.tahfidzDeposits.findMany({
-          where: and(
-            inArray(tahfidzDeposits.studentId, activeStudentIds),
-            sql`${tahfidzDeposits.depositDate} >= ${dayStartStr}`,
-            sql`${tahfidzDeposits.depositDate} <= ${dayEndStr}`,
-          ),
-        })
+      ? await db
+          .select()
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              inArray(tahfidzDeposits.studentId, activeStudentIds),
+              gte(tahfidzDeposits.depositDate, startDate),
+              lte(tahfidzDeposits.depositDate, endDate),
+            ),
+          )
       : [];
     const depositsByStudent = new Map();
     dayDeposits.forEach((d) => {
