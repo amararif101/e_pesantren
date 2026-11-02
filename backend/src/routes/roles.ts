@@ -35,6 +35,7 @@ const availableRoutes = [
   { path: "/apps/teachers", label: "Data Guru", category: "Guru" },
   { path: "/apps/salary-report", label: "Laporan Gaji", category: "Guru" },
   { path: "/apps/divisions", label: "Divisi", category: "Guru" },
+  { path: "/apps/structural", label: "Jabatan Struktural", category: "Guru" },
   { path: "/apps/attendance-recap", label: "Rekap Absensi", category: "Guru" },
   {
     path: "/apps/attendance/permissions",

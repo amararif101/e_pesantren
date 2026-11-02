@@ -198,6 +198,31 @@ export const tahfidzExamTypes = mysqlTable("tahfidz_exam_types", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
 
+// --- Tahfidz Backdate Requests (Pengajuan Izin Input Setoran Terlewat) ---
+// Musyrif Halaqah mengajukan izin ke Kepala PJ Tahfizh / PJ Tahfizh untuk
+// membuka akses input setoran pada tanggal tertentu yang sudah lewat.
+export const tahfidzBackdateRequests = mysqlTable("tahfidz_backdate_requests", {
+  id: int("id").primaryKey().autoincrement(),
+  teacherId: int("teacher_id")
+    .references(() => teachers.id, { onDelete: "cascade" })
+    .notNull(), // Musyrif pengampu yang mengajukan
+  halaqahId: int("halaqah_id"), // Grup halaqah yang ingin diinput (opsional / spesifik halaqah)
+  requestedDate: varchar("requested_date", { length: 10 }).notNull(), // Format YYYY-MM-DD
+  reason: text("reason").notNull(), // Alasan lupa/terlambat menginput
+  status: mysqlEnum("status", ["pending", "approved", "rejected"])
+    .default("pending")
+    .notNull(),
+  reviewedByTeacherId: int("reviewed_by_teacher_id").references(
+    () => teachers.id,
+    { onDelete: "set null" }
+  ), // Kepala PJ Tahfizh / PJ Tahfizh yang menyetujui/menolak
+  reviewedByUserId: int("reviewed_by_user_id"),
+  reviewNotes: text("review_notes"), // Catatan dari Kepala PJ / PJ Tahfizh
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+});
+
 // Relations
 import { relations } from "drizzle-orm";
 
@@ -232,6 +257,22 @@ export const tahfidzReportCardsRelations = relations(
     student: one(students, {
       fields: [tahfidzReportCards.studentId],
       references: [students.id],
+    }),
+  })
+);
+
+export const tahfidzBackdateRequestsRelations = relations(
+  tahfidzBackdateRequests,
+  ({ one }) => ({
+    teacher: one(teachers, {
+      fields: [tahfidzBackdateRequests.teacherId],
+      references: [teachers.id],
+      relationName: "backdateRequester",
+    }),
+    reviewerTeacher: one(teachers, {
+      fields: [tahfidzBackdateRequests.reviewedByTeacherId],
+      references: [teachers.id],
+      relationName: "backdateReviewer",
     }),
   })
 );

@@ -151,6 +151,12 @@ const router = createRouter({
           meta: { title: "Divisi" },
         },
         {
+          path: "structural",
+          name: "MobileStructuralRoles",
+          component: () => import("@/views/apps/StructuralRoles.vue"),
+          meta: { title: "Jabatan Struktural", requiresAdmin: true },
+        },
+        {
           path: "rooms",
           name: "MobileRooms",
           component: () => import("@/views/apps/Rooms.vue"),
@@ -637,6 +643,12 @@ const router = createRouter({
           path: "apps/divisions",
           name: "Divisions",
           component: () => import("@/views/apps/Divisions.vue"),
+        },
+        {
+          path: "apps/structural",
+          name: "StructuralRoles",
+          component: () => import("@/views/apps/StructuralRoles.vue"),
+          meta: { title: "Jabatan Struktural", requiresAdmin: true },
         },
         // Clinic Routes
         {

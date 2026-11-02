@@ -13,6 +13,7 @@ import {
   tahfidzReportSettings,
   tahfidzReportCards,
   tahfidzExamTypes,
+  tahfidzBackdateRequests,
   classHomeroomTeachers,
   settings,
   classes,
@@ -43,7 +44,12 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getJuzFromPage, getJuzFromSurah } from "../utils/quran-mapping";
 import { checkJuzCompletionBlock, safeCheckJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
-import { canBackdateTahfidzDeposit, isDateBeforeToday } from "../utils/tahfidz-permission";
+import {
+  canBackdateTahfidzDeposit,
+  hasDirectBackdateRole,
+  isDateBeforeToday,
+  formatDateYMD,
+} from "../utils/tahfidz-permission";
 import { authMiddleware, requirePermission } from "../middleware/auth";
 import {
   assertAcademicPeriodWritable,
@@ -77,6 +83,7 @@ app.use("*", authMiddleware);
 const depositSchema = z.object({
   studentId: z.number(),
   teacherId: z.number(),
+  halaqahId: z.number().nullable().optional(),
   type: z.enum(["ziyadah", "murajaah", "sabqi", "manzil", "izin", "alpha", "sakit", "tidak_setor"]),
   isLate: z.boolean().optional(),
   isCompleted: z.boolean().nullable().optional(),
@@ -390,13 +397,17 @@ app.post("/deposits", zValidator("json", depositSchema), async (c) => {
 
     if (isDateBeforeToday(depositDate)) {
       const user = c.get("user");
-      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
+      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role, {
+        targetDate: depositDate,
+        halaqahId: body.halaqahId,
+      });
       if (!allowed) {
         return c.json(
           {
             success: false,
+            requiresBackdateApproval: true,
             message:
-              "Pengampu halaqoh hanya dapat menginput setoran untuk hari ini. Input untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.",
+              "Pengampu halaqah memerlukan persetujuan Kepala PJ Tahfizh atau PJ Tahfizh untuk menginput setoran pada tanggal yang sudah lewat.",
           },
           403,
         );
@@ -510,13 +521,17 @@ app.put("/deposits/:id", zValidator("json", depositSchema), async (c) => {
 
     if (isDateBeforeToday(depositDate)) {
       const user = c.get("user");
-      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
+      const allowed = await canBackdateTahfidzDeposit(user.userId, user.role, {
+        targetDate: depositDate,
+        halaqahId: body.halaqahId,
+      });
       if (!allowed) {
         return c.json(
           {
             success: false,
+            requiresBackdateApproval: true,
             message:
-              "Pengampu halaqoh hanya dapat mengubah setoran untuk hari ini. Perubahan untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.",
+              "Pengampu halaqah memerlukan persetujuan Kepala PJ Tahfizh atau PJ Tahfizh untuk mengubah setoran pada tanggal yang sudah lewat.",
           },
           403,
         );
@@ -1598,12 +1613,24 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
 });
 
 // GET /can-backdate - can the current user submit/edit tahfidz deposits
-// for a date before today? (admin or Divisi Tahfidz head/member only)
+// for a date before today? (admin, Kepala PJ Tahfizh / PJ Tahfizh, or approved backdate request)
 app.get("/can-backdate", async (c) => {
   try {
     const user = c.get("user");
-    const allowed = await canBackdateTahfidzDeposit(user.userId, user.role);
-    return c.json({ success: true, data: { allowed } });
+    const targetDate = c.req.query("date");
+    const halaqahId = c.req.query("halaqahId");
+    const hasDirectAccess = await hasDirectBackdateRole(user.userId, user.role);
+    const allowed = await canBackdateTahfidzDeposit(user.userId, user.role, {
+      targetDate: targetDate || undefined,
+      halaqahId: halaqahId ? Number(halaqahId) : undefined,
+    });
+    return c.json({
+      success: true,
+      data: {
+        allowed,
+        hasDirectAccess,
+      },
+    });
   } catch (e: any) {
     return c.json(
       { success: false, message: e.message || "Internal Error" },
@@ -1611,6 +1638,373 @@ app.get("/can-backdate", async (c) => {
     );
   }
 });
+
+// GET /backdate-status - Cek status izin input tanggal mundur untuk Musyrif pada tanggal & halaqah tertentu
+app.get("/backdate-status", async (c) => {
+  try {
+    const user = c.get("user");
+    const dateParam = c.req.query("date");
+    const halaqahIdParam = c.req.query("halaqahId");
+
+    const dateStr = dateParam
+      ? formatDateYMD(dateParam)
+      : formatDateYMD(new Date());
+    const isPastDate = isDateBeforeToday(new Date(dateStr));
+    const hasDirectAccess = await hasDirectBackdateRole(user.userId, user.role);
+
+    if (!isPastDate || hasDirectAccess) {
+      return c.json({
+        success: true,
+        data: {
+          date: dateStr,
+          isPastDate,
+          hasDirectAccess,
+          canInput: true,
+          requestStatus: "approved",
+          request: null,
+        },
+      });
+    }
+
+    const teacher = await db.query.teachers.findFirst({
+      where: eq(teachers.userId, user.userId),
+    });
+
+    if (!teacher) {
+      return c.json({
+        success: true,
+        data: {
+          date: dateStr,
+          isPastDate,
+          hasDirectAccess: false,
+          canInput: false,
+          requestStatus: "none",
+          request: null,
+        },
+      });
+    }
+
+    let latestRequest: any = null;
+    try {
+      const conditions: any[] = [
+        eq(tahfidzBackdateRequests.requestedDate, dateStr),
+      ];
+      if (halaqahIdParam) {
+        conditions.push(
+          or(
+            and(
+              eq(tahfidzBackdateRequests.teacherId, teacher.id),
+              eq(tahfidzBackdateRequests.halaqahId, Number(halaqahIdParam)),
+            ),
+            eq(tahfidzBackdateRequests.teacherId, teacher.id),
+          ),
+        );
+      } else {
+        conditions.push(eq(tahfidzBackdateRequests.teacherId, teacher.id));
+      }
+
+      const rows = await db
+        .select({
+          id: tahfidzBackdateRequests.id,
+          teacherId: tahfidzBackdateRequests.teacherId,
+          halaqahId: tahfidzBackdateRequests.halaqahId,
+          requestedDate: tahfidzBackdateRequests.requestedDate,
+          reason: tahfidzBackdateRequests.reason,
+          status: tahfidzBackdateRequests.status,
+          reviewNotes: tahfidzBackdateRequests.reviewNotes,
+          reviewedAt: tahfidzBackdateRequests.reviewedAt,
+          createdAt: tahfidzBackdateRequests.createdAt,
+        })
+        .from(tahfidzBackdateRequests)
+        .where(and(...conditions))
+        .orderBy(desc(tahfidzBackdateRequests.id))
+        .limit(1);
+
+      latestRequest = rows[0] || null;
+    } catch {
+      // Tabel belum ada atau kosong
+    }
+
+    const requestStatus = latestRequest ? latestRequest.status : "none";
+    const canInput = requestStatus === "approved";
+
+    return c.json({
+      success: true,
+      data: {
+        date: dateStr,
+        isPastDate,
+        hasDirectAccess: false,
+        canInput,
+        requestStatus,
+        request: latestRequest,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// GET /backdate-requests - Daftar pengajuan izin input tanggal mundur (untuk Kepala PJ / PJ Tahfizh atau Musyrif)
+app.get("/backdate-requests", async (c) => {
+  try {
+    const user = c.get("user");
+    const statusFilter = c.req.query("status"); // pending | approved | rejected
+    const halaqahIdFilter = c.req.query("halaqahId");
+    const dateFilter = c.req.query("date");
+
+    const hasDirectAccess = await hasDirectBackdateRole(user.userId, user.role);
+    const teacher = await db.query.teachers.findFirst({
+      where: eq(teachers.userId, user.userId),
+    });
+
+    const conditions: any[] = [];
+    if (!hasDirectAccess) {
+      if (!teacher) {
+        return c.json({ success: true, data: [], canApprove: false });
+      }
+      conditions.push(eq(tahfidzBackdateRequests.teacherId, teacher.id));
+    }
+
+    if (statusFilter && ["pending", "approved", "rejected"].includes(statusFilter)) {
+      conditions.push(eq(tahfidzBackdateRequests.status, statusFilter as any));
+    }
+    if (halaqahIdFilter) {
+      conditions.push(eq(tahfidzBackdateRequests.halaqahId, Number(halaqahIdFilter)));
+    }
+    if (dateFilter) {
+      conditions.push(eq(tahfidzBackdateRequests.requestedDate, formatDateYMD(dateFilter)));
+    }
+
+    const rows = await db
+      .select({
+        id: tahfidzBackdateRequests.id,
+        teacherId: tahfidzBackdateRequests.teacherId,
+        teacherName: teachers.fullName,
+        teacherNip: teachers.nip,
+        halaqahId: tahfidzBackdateRequests.halaqahId,
+        halaqahName: halaqahGroups.name,
+        requestedDate: tahfidzBackdateRequests.requestedDate,
+        reason: tahfidzBackdateRequests.reason,
+        status: tahfidzBackdateRequests.status,
+        reviewedByTeacherId: tahfidzBackdateRequests.reviewedByTeacherId,
+        reviewNotes: tahfidzBackdateRequests.reviewNotes,
+        reviewedAt: tahfidzBackdateRequests.reviewedAt,
+        createdAt: tahfidzBackdateRequests.createdAt,
+      })
+      .from(tahfidzBackdateRequests)
+      .innerJoin(teachers, eq(tahfidzBackdateRequests.teacherId, teachers.id))
+      .leftJoin(
+        halaqahGroups,
+        eq(tahfidzBackdateRequests.halaqahId, halaqahGroups.id),
+      )
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(tahfidzBackdateRequests.createdAt));
+
+    return c.json({
+      success: true,
+      canApprove: hasDirectAccess,
+      data: rows,
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// POST /backdate-requests - Musyrif mengajukan izin input setoran tahfizh untuk tanggal yang terlewat
+const createBackdateRequestSchema = z.object({
+  requestedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal harus YYYY-MM-DD"),
+  halaqahId: z.number().int().positive().nullable().optional(),
+  reason: z.string().min(3, "Alasan keterlambatan minimal 3 karakter").max(500),
+});
+
+app.post(
+  "/backdate-requests",
+  zValidator("json", createBackdateRequestSchema),
+  async (c) => {
+    try {
+      const user = c.get("user");
+      const body = c.req.valid("json");
+
+      const teacher = await db.query.teachers.findFirst({
+        where: eq(teachers.userId, user.userId),
+      });
+
+      if (!teacher) {
+        return c.json(
+          {
+            success: false,
+            message: "Akun Anda belum terhubung dengan data Guru/Musyrif.",
+          },
+          400,
+        );
+      }
+
+      // Cek apakah sudah ada request untuk tanggal & musyrif tersebut
+      const existingConditions: any[] = [
+        eq(tahfidzBackdateRequests.teacherId, teacher.id),
+        eq(tahfidzBackdateRequests.requestedDate, body.requestedDate),
+      ];
+      if (body.halaqahId) {
+        existingConditions.push(
+          eq(tahfidzBackdateRequests.halaqahId, body.halaqahId),
+        );
+      }
+
+      const [existing] = await db
+        .select()
+        .from(tahfidzBackdateRequests)
+        .where(and(...existingConditions))
+        .orderBy(desc(tahfidzBackdateRequests.id))
+        .limit(1);
+
+      if (existing) {
+        if (existing.status === "approved") {
+          return c.json({
+            success: true,
+            message: "Akses input untuk tanggal ini sudah disetujui.",
+            data: existing,
+          });
+        }
+
+        // Jika masih pending atau sebelumnya rejected, perbarui alasan & kembalikan ke pending
+        await db
+          .update(tahfidzBackdateRequests)
+          .set({
+            reason: body.reason,
+            halaqahId: body.halaqahId ?? existing.halaqahId,
+            status: "pending",
+            reviewNotes: null,
+            reviewedAt: null,
+            reviewedByTeacherId: null,
+            reviewedByUserId: null,
+          })
+          .where(eq(tahfidzBackdateRequests.id, existing.id));
+
+        const [updated] = await db
+          .select()
+          .from(tahfidzBackdateRequests)
+          .where(eq(tahfidzBackdateRequests.id, existing.id));
+
+        return c.json({
+          success: true,
+          message:
+            "Pengajuan izin input berhasil dikirim dan sedang menunggu persetujuan Kepala PJ / PJ Tahfizh.",
+          data: updated,
+        });
+      }
+
+      const [result] = await db.insert(tahfidzBackdateRequests).values({
+        teacherId: teacher.id,
+        halaqahId: body.halaqahId ?? null,
+        requestedDate: body.requestedDate,
+        reason: body.reason,
+        status: "pending",
+      });
+
+      const [created] = await db
+        .select()
+        .from(tahfidzBackdateRequests)
+        .where(eq(tahfidzBackdateRequests.id, result.insertId));
+
+      return c.json(
+        {
+          success: true,
+          message:
+            "Pengajuan izin input berhasil dikirim ke Kepala PJ / PJ Tahfizh.",
+          data: created,
+        },
+        201,
+      );
+    } catch (e: any) {
+      return c.json(
+        { success: false, message: e.message || "Internal Error" },
+        500,
+      );
+    }
+  },
+);
+
+// PUT & PATCH /backdate-requests/:id/review - Kepala PJ Tahfizh / PJ Tahfizh melakukan Approve / Reject
+const reviewBackdateRequestSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+  reviewNotes: z.string().max(500).nullable().optional(),
+});
+
+app.put(
+  "/backdate-requests/:id/review",
+  zValidator("json", reviewBackdateRequestSchema),
+  async (c) => {
+    try {
+      const id = Number(c.req.param("id"));
+      const user = c.get("user");
+      const body = c.req.valid("json");
+
+      const canReview = await hasDirectBackdateRole(user.userId, user.role);
+      if (!canReview) {
+        return c.json(
+          {
+            success: false,
+            message:
+              "Hanya Kepala PJ Tahfizh, PJ Tahfizh, atau Pimpinan yang dapat menyetujui pengajuan ini.",
+          },
+          403,
+        );
+      }
+
+      const [existing] = await db
+        .select()
+        .from(tahfidzBackdateRequests)
+        .where(eq(tahfidzBackdateRequests.id, id));
+
+      if (!existing) {
+        return c.json(
+          { success: false, message: "Data pengajuan tidak ditemukan." },
+          404,
+        );
+      }
+
+      const reviewerTeacher = await db.query.teachers.findFirst({
+        where: eq(teachers.userId, user.userId),
+      });
+
+      await db
+        .update(tahfidzBackdateRequests)
+        .set({
+          status: body.status,
+          reviewNotes: body.reviewNotes ?? null,
+          reviewedByTeacherId: reviewerTeacher?.id ?? null,
+          reviewedByUserId: user.userId,
+          reviewedAt: new Date(),
+        })
+        .where(eq(tahfidzBackdateRequests.id, id));
+
+      const [updated] = await db
+        .select()
+        .from(tahfidzBackdateRequests)
+        .where(eq(tahfidzBackdateRequests.id, id));
+
+      return c.json({
+        success: true,
+        message:
+          body.status === "approved"
+            ? "Pengajuan disetujui. Musyrif kini dapat langsung menginput setoran pada tanggal tersebut."
+            : "Pengajuan ditolak.",
+        data: updated,
+      });
+    } catch (e: any) {
+      return c.json(
+        { success: false, message: e.message || "Internal Error" },
+        500,
+      );
+    }
+  },
+);
 
 // GET /juz-status/:studentId - is this student blocked from new Taqdim
 // pending a UKJ exam for a juz they've already finished?

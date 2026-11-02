@@ -67,6 +67,11 @@ const submenuByMain = {
           { label: "Laporan Gaji", route: "/apps/salary-report" },
           { label: "Divisi", route: "/apps/divisions" },
           {
+            label: "Jabatan Struktural",
+            route: "/apps/structural",
+            adminOnly: true,
+          },
+          {
             label: "Rekap Absensi",
             route: "/apps/attendance-recap",
             adminOnly: true,

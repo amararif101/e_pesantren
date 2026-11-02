@@ -220,6 +220,85 @@
 
       <!-- Student List -->
       <div class="space-y-4">
+        <!-- Banner Pengajuan Input Terlambat untuk Kepala PJ Tahfizh / PJ Tahfizh -->
+        <div
+          v-if="hasDirectBackdateAccess && pendingBackdateApprovals.length > 0"
+          class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Icon icon="solar:bell-bing-bold-duotone" class="text-xl" />
+            </div>
+            <div>
+              <h4 class="font-bold text-amber-900 text-sm">
+                {{ pendingBackdateApprovals.length }} Pengajuan Izin Input Terlambat Menunggu Persetujuan
+              </h4>
+              <p class="text-xs text-amber-700">
+                Musyrif halaqah mengajukan izin untuk menginput setoran pada hari yang terlewat.
+              </p>
+            </div>
+          </div>
+          <button
+            @click="showApprovalListModal = true"
+            class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+          >
+            Lihat & Approve
+          </button>
+        </div>
+
+        <!-- Info Status Tanggal Terlewat untuk Musyrif Halaqah -->
+        <div
+          v-if="isPastSelectedDate && !hasDirectBackdateAccess"
+          class="rounded-xl p-3.5 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm"
+          :class="
+            backdateRequestStatus === 'approved'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : backdateRequestStatus === 'pending'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+          "
+        >
+          <div class="flex items-center gap-2.5">
+            <Icon
+              :icon="
+                backdateRequestStatus === 'approved'
+                  ? 'solar:check-circle-bold'
+                  : backdateRequestStatus === 'pending'
+                    ? 'solar:clock-circle-bold'
+                    : 'solar:lock-keyhole-minimalistic-bold'
+              "
+              class="text-lg shrink-0"
+            />
+            <div>
+              <span v-if="backdateRequestStatus === 'approved'" class="font-semibold">
+                Disetujui PJ Tahfizh — Anda dapat langsung menginput setoran untuk tanggal ini.
+              </span>
+              <span v-else-if="backdateRequestStatus === 'pending'" class="font-semibold">
+                Menunggu Persetujuan Kepala PJ / PJ Tahfizh untuk tanggal ini.
+              </span>
+              <span v-else class="font-medium">
+                Tanggal sudah terlewat. Ajukan izin ke Kepala PJ / PJ Tahfizh untuk membuka input.
+              </span>
+            </div>
+          </div>
+          <button
+            v-if="backdateRequestStatus !== 'approved'"
+            @click="showBackdateRequestModal = true"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            :class="
+              backdateRequestStatus === 'pending'
+                ? 'bg-amber-200/70 text-amber-900 hover:bg-amber-200'
+                : 'bg-[#602515] text-white hover:bg-[#4a1c10]'
+            "
+          >
+            {{
+              backdateRequestStatus === "pending"
+                ? "Lihat Status Pengajuan"
+                : "Ajukan Izin Input"
+            }}
+          </button>
+        </div>
+
         <div
           class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-6"
         >
@@ -792,6 +871,227 @@
       :message="statusModalMessage"
       @close="showStatusModal = false"
     />
+
+    <!-- Modal Pengajuan Izin Input Terlambat (Untuk Musyrif Halaqah) -->
+    <Transition name="fade">
+      <div
+        v-if="showBackdateRequestModal"
+        class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      >
+        <div
+          class="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200"
+        >
+          <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+              <Icon
+                :icon="
+                  backdateRequestStatus === 'pending'
+                    ? 'solar:clock-circle-bold-duotone'
+                    : 'solar:lock-keyhole-minimalistic-bold-duotone'
+                "
+                class="text-xl"
+                :class="
+                  backdateRequestStatus === 'pending'
+                    ? 'text-amber-500'
+                    : 'text-[#602515]'
+                "
+              />
+              <span>
+                {{
+                  backdateRequestStatus === "pending"
+                    ? "Menunggu Persetujuan"
+                    : "Izin Input Tahfizh Terlewat"
+                }}
+              </span>
+            </h3>
+            <button
+              @click="showBackdateRequestModal = false"
+              class="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500"
+            >
+              <Icon icon="solar:close-circle-linear" class="text-xl" />
+            </button>
+          </div>
+
+          <!-- STATE 1: MENUNGGU PERSETUJUAN (PENDING) -->
+          <div v-if="backdateRequestStatus === 'pending'" class="p-6 space-y-4">
+            <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-center space-y-2">
+              <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <Icon icon="solar:hourglass-line-duotone" class="text-2xl" />
+              </div>
+              <h4 class="font-bold text-amber-900">
+                Menunggu di-Approve oleh Kepala PJ / PJ Tahfizh
+              </h4>
+              <p class="text-xs text-amber-700 leading-relaxed">
+                Pengajuan Anda untuk menginput setoran pada tanggal
+                <strong>{{ formatDateFull(selectedDate) }}</strong> sudah terkirim.
+                Begitu di-approve oleh Kepala PJ atau PJ Tahfizh, Anda dapat langsung menginput tanpa popup ini.
+              </p>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl p-3.5 text-xs space-y-1.5 border border-slate-100">
+              <div class="flex justify-between text-slate-500">
+                <span>Halaqah:</span>
+                <span class="font-semibold text-slate-700">{{ selectedHalaqah?.name || "-" }}</span>
+              </div>
+              <div class="flex justify-between text-slate-500">
+                <span>Tanggal Setoran:</span>
+                <span class="font-semibold text-slate-700">{{ formatDateFull(selectedDate) }}</span>
+              </div>
+              <div class="pt-1 border-t border-slate-200/70">
+                <span class="text-slate-500 block mb-0.5">Alasan yang diajukan:</span>
+                <p class="font-medium text-slate-800 italic">"{{ currentBackdateRequest?.reason }}"</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button
+                type="button"
+                @click="loadBackdateStatus"
+                :disabled="submittingBackdateRequest"
+                class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cek Status Terbaru
+              </button>
+              <button
+                type="button"
+                @click="showBackdateRequestModal = false"
+                class="flex-1 py-2.5 px-4 rounded-xl bg-[#602515] text-white font-semibold text-sm hover:bg-[#4a1c10] transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+
+          <!-- STATE 2: BELUM MENGAJUKAN ATAU DITOLAK (FORM PENGAJUAN) -->
+          <form v-else @submit.prevent="submitBackdateRequest" class="p-6 space-y-4">
+            <div
+              v-if="backdateRequestStatus === 'rejected'"
+              class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700"
+            >
+              <strong>Pengajuan sebelumnya ditolak.</strong>
+              <span v-if="currentBackdateRequest?.reviewNotes">
+                Catatan PJ Tahfizh: "{{ currentBackdateRequest.reviewNotes }}"
+              </span>
+              Silakan ajukan kembali jika diperlukan.
+            </div>
+
+            <p class="text-sm text-slate-600 leading-relaxed">
+              Tanggal <strong>{{ formatDateFull(selectedDate) }}</strong> sudah terlewat.
+              Silakan ajukan konfirmasi kepada <strong>Kepala PJ Tahfizh</strong> atau
+              <strong>PJ Tahfizh</strong> agar akses input dibuka.
+            </p>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Alasan Terlambat Menginput *
+              </label>
+              <textarea
+                v-model="backdateReason"
+                rows="3"
+                required
+                placeholder="Contoh: Kemarin sore terkendala jaringan / perangkat saat halaqah berlangsung..."
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#602515]/20 focus:border-[#602515]"
+              ></textarea>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button
+                type="button"
+                @click="showBackdateRequestModal = false"
+                class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                :disabled="submittingBackdateRequest || !backdateReason.trim()"
+                class="flex-1 py-2.5 px-4 rounded-xl bg-[#602515] text-white font-semibold text-sm hover:bg-[#4a1c10] disabled:opacity-50 transition-colors"
+              >
+                {{ submittingBackdateRequest ? "Mengirim..." : "Ajukan ke PJ Tahfizh" }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Modal Daftar Persetujuan untuk Kepala PJ Tahfizh / PJ Tahfizh -->
+    <Transition name="fade">
+      <div
+        v-if="showApprovalListModal"
+        class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      >
+        <div
+          class="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden max-h-[85vh] flex flex-col"
+        >
+          <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+            <div>
+              <h3 class="font-bold text-slate-800">
+                Daftar Pengajuan Izin Input Tahfizh Terlewat
+              </h3>
+              <p class="text-xs text-slate-500">
+                Konfirmasi pengajuan dari musyrif halaqah untuk membuka kunci input tanggal mundur.
+              </p>
+            </div>
+            <button
+              @click="showApprovalListModal = false"
+              class="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500"
+            >
+              <Icon icon="solar:close-circle-linear" class="text-xl" />
+            </button>
+          </div>
+
+          <div class="p-6 overflow-y-auto space-y-3">
+            <div
+              v-if="pendingBackdateApprovals.length === 0"
+              class="text-center py-8 text-slate-400 text-sm"
+            >
+              Tidak ada pengajuan yang menunggu persetujuan saat ini.
+            </div>
+
+            <div
+              v-for="req in pendingBackdateApprovals"
+              :key="req.id"
+              class="p-4 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-slate-800 text-sm">{{ req.teacherName }}</span>
+                  <span
+                    v-if="req.halaqahName"
+                    class="px-2 py-0.5 rounded-full bg-[#602515]/10 text-[#602515] text-xs font-semibold"
+                  >
+                    {{ req.halaqahName }}
+                  </span>
+                </div>
+                <div class="text-xs text-slate-600">
+                  Tanggal yang diajukan:
+                  <strong class="text-slate-800">{{ formatDateFull(req.requestedDate) }}</strong>
+                </div>
+                <div class="text-xs text-slate-600 italic bg-white p-2 rounded-lg border border-slate-100">
+                  "{{ req.reason }}"
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  @click="handleReviewBackdate(req.id, 'rejected')"
+                  class="px-3 py-2 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                >
+                  Tolak
+                </button>
+                <button
+                  @click="handleReviewBackdate(req.id, 'approved')"
+                  class="px-3.5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold transition-colors"
+                >
+                  Setujui (Approve)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -822,15 +1122,29 @@ const statusModalMessage = ref("");
 const showBulkConfirm = ref(false);
 
 // Whether the current user may submit/edit setoran for a date before today
-// (admin or Divisi Tahfidz head/member); defaults to true while loading so
-// authorized users aren't blocked by the async check, backend still enforces it
+// (admin, Kepala PJ / PJ Tahfizh, or has an approved backdate request for selectedDate)
 const canBackdate = ref(true);
+const hasDirectBackdateAccess = ref(false);
+const backdateRequestStatus = ref("none"); // 'none' | 'pending' | 'approved' | 'rejected'
+const currentBackdateRequest = ref(null);
+const showBackdateRequestModal = ref(false);
+const backdateReason = ref("");
+const submittingBackdateRequest = ref(false);
+
+// For Kepala PJ Tahfizh / PJ Tahfizh approval queue
+const pendingBackdateApprovals = ref([]);
+const showApprovalListModal = ref(false);
 
 // Calendar State
 const now = new Date();
 const currentMonth = ref(now.getMonth());
 const currentYear = ref(now.getFullYear());
 const selectedDate = ref(now.toISOString().split("T")[0]); // YYYY-MM-DD
+
+const isPastSelectedDate = computed(() => {
+  const todayStr = new Date().toISOString().split("T")[0];
+  return selectedDate.value < todayStr;
+});
 
 // Modal State
 const showModal = ref(false);
@@ -907,6 +1221,7 @@ function selectHalaqah(halaqah) {
   selectedHalaqahId.value = halaqah.id;
   showHalaqahDropdown.value = false;
   loadDateData();
+  loadBackdateStatus();
 }
 
 const firstDayOfWeek = computed(() => {
@@ -945,8 +1260,9 @@ function selectDate(day) {
   const da = String(day).padStart(2, "0");
   selectedDate.value = `${y}-${m}-${da}`;
 
-  // Load data for this date
+  // Load data for this date & check backdate approval status
   loadDateData();
+  loadBackdateStatus();
 }
 
 function isToday(day) {
@@ -1401,6 +1717,17 @@ async function calculateDeposit() {
 // --- Modal Functions
 // Open Modal
 async function openModal(item, bulk = false, presetType = null) {
+  // Jika tanggal sudah lewat dan musyrif belum mendapat approval dari Kepala PJ / PJ Tahfizh,
+  // tampilkan popup modal pengajuan / status menunggu persetujuan.
+  // Jika sudah di-approve (canBackdate === true), langsung buka modal input setoran tanpa popup penghalang.
+  if (isPastSelectedDate.value && !canBackdate.value) {
+    await loadBackdateStatus();
+    if (!canBackdate.value) {
+      showBackdateRequestModal.value = true;
+      return;
+    }
+  }
+
   // Taqdim is blocked once the student has finished a juz until they pass
   // the UKJ exam for it (also enforced server-side).
   if (!bulk && presetType === "ziyadah" && item?.juzBlock?.blocked) {
@@ -1500,11 +1827,8 @@ async function submitDeposit() {
 
   const todayStr = new Date().toISOString().split("T")[0];
   if (selectedDate.value < todayStr && !canBackdate.value) {
-    statusModalType.value = "failed";
-    statusModalTitle.value = "Tidak Diizinkan";
-    statusModalMessage.value =
-      "Pengampu halaqoh hanya dapat menginput setoran untuk hari ini. Input untuk hari sebelumnya hanya dapat dilakukan oleh Kepala Divisi atau anggota Divisi Tahfidz.";
-    showStatusModal.value = true;
+    showModal.value = false;
+    showBackdateRequestModal.value = true;
     return;
   }
 
@@ -1732,20 +2056,84 @@ function getPhotoUrl(path) {
   return path;
 }
 
-async function loadCanBackdate() {
+async function loadBackdateStatus() {
   try {
-    const res = await tahfidzApi.canBackdate();
-    if (res.success) {
-      canBackdate.value = !!res.data?.allowed;
+    const params = { date: selectedDate.value };
+    if (selectedHalaqahId.value) {
+      params.halaqahId = selectedHalaqahId.value;
+    }
+    const res = await tahfidzApi.getBackdateStatus(params);
+    if (res.success && res.data) {
+      hasDirectBackdateAccess.value = !!res.data.hasDirectAccess;
+      canBackdate.value = !!res.data.canInput;
+      backdateRequestStatus.value = res.data.requestStatus || "none";
+      currentBackdateRequest.value = res.data.request || null;
+
+      if (hasDirectBackdateAccess.value) {
+        loadPendingBackdateApprovals();
+      }
     }
   } catch (e) {
-    console.error("Failed to load backdate permission:", e);
+    console.error("Failed to load backdate status:", e);
+  }
+}
+
+async function submitBackdateRequest() {
+  if (!backdateReason.value.trim()) return;
+  submittingBackdateRequest.value = true;
+  try {
+    const res = await tahfidzApi.createBackdateRequest({
+      requestedDate: selectedDate.value,
+      halaqahId: selectedHalaqahId.value || null,
+      reason: backdateReason.value.trim(),
+    });
+    if (res.success) {
+      backdateReason.value = "";
+      await loadBackdateStatus();
+    }
+  } catch (e) {
+    statusModalType.value = "failed";
+    statusModalTitle.value = "Gagal Mengirim Pengajuan";
+    statusModalMessage.value = e.message || "Terjadi kesalahan saat mengirim pengajuan.";
+    showStatusModal.value = true;
+  } finally {
+    submittingBackdateRequest.value = false;
+  }
+}
+
+async function loadPendingBackdateApprovals() {
+  try {
+    const res = await tahfidzApi.getBackdateRequests({ status: "pending" });
+    if (res.success) {
+      pendingBackdateApprovals.value = res.data || [];
+    }
+  } catch (e) {
+    console.error("Failed to load pending backdate approvals:", e);
+  }
+}
+
+async function handleReviewBackdate(requestId, status) {
+  try {
+    const res = await tahfidzApi.reviewBackdateRequest(requestId, { status });
+    if (res.success) {
+      await loadPendingBackdateApprovals();
+      await loadBackdateStatus();
+      statusModalType.value = "success";
+      statusModalTitle.value = status === "approved" ? "Disetujui" : "Ditolak";
+      statusModalMessage.value = res.message;
+      showStatusModal.value = true;
+    }
+  } catch (e) {
+    statusModalType.value = "failed";
+    statusModalTitle.value = "Gagal Memproses";
+    statusModalMessage.value = e.message || "Gagal memproses persetujuan.";
+    showStatusModal.value = true;
   }
 }
 
 onMounted(() => {
   loadInitial();
-  loadCanBackdate();
+  loadBackdateStatus();
 });
 </script>
 

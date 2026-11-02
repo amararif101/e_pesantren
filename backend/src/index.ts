@@ -43,6 +43,7 @@ import {
   analyticsRoute,
   studentLeavesRoute,
   savingsRoute,
+  structuralRoute,
 } from "./routes";
 
 import {
@@ -121,6 +122,7 @@ app.route("/api/users", usersRoute);
 app.route("/api/notifications", notificationsRoute);
 app.route("/api/push", pushRoute);
 app.route("/api/divisions", divisionsRoute);
+app.route("/api/structural", structuralRoute);
 app.route("/api/settings", settingsRoute);
 app.route("/api/permissions", permissionsRoute);
 app.route("/api/salary", salaryRoute);

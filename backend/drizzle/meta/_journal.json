@@ -162,6 +162,13 @@
       "when": 1789610259689,
       "tag": "0022_add_ua_nilai7_9",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1793632200000,
+      "tag": "0023_add_structural_role_hierarchy",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,11 @@ import { eq, and, desc, getTableColumns, sql } from "drizzle-orm";
 import { db } from "../db";
 import { teachers } from "../db/schema/teachers";
 import { divisions, teacherDivisions } from "../db/schema/divisions";
+import {
+  structuralUnits,
+  structuralRoles,
+  teacherStructuralAssignments,
+} from "../db/schema/structural-roles";
 import { users } from "../db/schema/users";
 import { salaryGrades, positionAllowances } from "../db/schema/salary";
 import { roomSupervisors } from "../db/schema/rooms";
@@ -67,7 +72,7 @@ teachersRoute.get("/", async (c) => {
 
     const allTeachers = await query;
 
-    // Fetch related divisions manually to be safe
+    // Fetch related payroll divisions manually to be safe
     const allRelations = await db
       .select({
         teacherId: teacherDivisions.teacherId,
@@ -75,6 +80,48 @@ teachersRoute.get("/", async (c) => {
       })
       .from(teacherDivisions)
       .innerJoin(divisions, eq(teacherDivisions.divisionId, divisions.id));
+
+    // Fetch related structural assignments (separated from payroll divisions)
+    let allStructuralRelations: any[] = [];
+    try {
+      allStructuralRelations = await db
+        .select({
+          id: teacherStructuralAssignments.id,
+          teacherId: teacherStructuralAssignments.teacherId,
+          structuralRoleId: structuralRoles.id,
+          roleCode: structuralRoles.code,
+          roleName: structuralRoles.name,
+          scope: structuralRoles.scope,
+          rankLevel: structuralRoles.rankLevel,
+          canBackdateTahfidz: structuralRoles.canBackdateTahfidz,
+          structuralUnitId: structuralUnits.id,
+          unitCode: structuralUnits.code,
+          unitName: structuralUnits.name,
+          unitType: structuralUnits.type,
+          assignmentDetail: teacherStructuralAssignments.assignmentDetail,
+          academicYear: teacherStructuralAssignments.academicYear,
+          isPrimary: teacherStructuralAssignments.isPrimary,
+          status: teacherStructuralAssignments.status,
+        })
+        .from(teacherStructuralAssignments)
+        .innerJoin(
+          structuralRoles,
+          eq(
+            teacherStructuralAssignments.structuralRoleId,
+            structuralRoles.id,
+          ),
+        )
+        .leftJoin(
+          structuralUnits,
+          eq(
+            teacherStructuralAssignments.structuralUnitId,
+            structuralUnits.id,
+          ),
+        )
+        .where(eq(teacherStructuralAssignments.status, "active"));
+    } catch {
+      // Safe fallback if structural tables have not been migrated yet
+    }
 
     const data = allTeachers.map((row) => {
       // Reconstruct nested objects
@@ -118,9 +165,15 @@ teachersRoute.get("/", async (c) => {
       const myDivs = allRelations
         .filter((r) => r.teacherId === teacherData.id)
         .map((r) => r.division);
+
+      const myStructuralAssignments = allStructuralRelations.filter(
+        (r) => r.teacherId === teacherData.id,
+      );
+
       return {
         ...teacherData,
         divisions: myDivs,
+        structuralAssignments: myStructuralAssignments,
         salaryGrade,
         positionAllowance,
       };
@@ -445,6 +498,13 @@ teachersRoute.delete("/:id", requirePermission("/apps/teachers"), async (c) => {
     await db.transaction(async (tx) => {
       // 1. Delete pivot/link records
       await tx.delete(teacherDivisions).where(eq(teacherDivisions.teacherId, id));
+      try {
+        await tx
+          .delete(teacherStructuralAssignments)
+          .where(eq(teacherStructuralAssignments.teacherId, id));
+      } catch {
+        // Ignore if table not yet migrated
+      }
       await tx.delete(roomSupervisors).where(eq(roomSupervisors.teacherId, id));
       await tx.delete(halaqahMentors).where(eq(halaqahMentors.teacherId, id));
       await tx.delete(classHomeroomTeachers).where(eq(classHomeroomTeachers.teacherId, id));
@@ -679,8 +739,6 @@ teachersRoute.post(
             });
             if (existingUser) {
               preview.duplicateEmail++;
-              // Not a hard error for preview, but good to know
-              // throw new Error("Email sudah digunakan oleh user lain");
             }
           }
 
@@ -796,7 +854,6 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
       try {
         const rawData: any = {};
         for (const [k, v] of Object.entries(columnMapping)) {
-          // Fix: Allow 0 value but skip null/undefined/empty string
           if (row[k] !== undefined && row[k] !== null && row[k] !== "") {
             rawData[v] = typeof row[k] === "string" ? row[k].trim() : row[k];
           }
@@ -855,7 +912,6 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
           postalCode: rawData.postalCode
             ? String(rawData.postalCode)
             : undefined,
-          // Ensure role is updated/set correctly
           role: (rawData.employeeType === "staff" ? "staff" : "teacher") as
             | "staff"
             | "teacher",
@@ -869,26 +925,22 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
           });
 
           if (existUser) {
-            // Update existing user profile
             await db
               .update(users)
               .set({
                 ...userProfileData,
-                // Do not update password or role if they already exist, unless we want to enforce it?
-                // Let's keep existing role if it's admin/higher, but maybe safe to update profile info.
                 updatedAt: new Date(),
               })
               .where(eq(users.id, existUser.id));
 
             userId = existUser.id;
           } else if (rawData.password) {
-            // Create New User
             const hashed = await hashPassword(rawData.password);
             const newUser = await db.insert(users).values({
               email: rawData.email,
               password: hashed,
               ...userProfileData,
-              role: userProfileData.role as any, // Cast to match enum if needed
+              role: userProfileData.role as any,
             });
             userId = Number(newUser[0].insertId);
           }
@@ -898,7 +950,6 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
         const formatRegion = (name: any) =>
           name ? JSON.stringify({ code: null, name: String(name) }) : undefined;
 
-        // Auto-generate plain text address from components
         const generatedAddress = [
           rawData.addressDetail,
           rawData.village,
@@ -933,7 +984,6 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
           birthDate: rawData.birthDate,
           birthPlace: rawData.birthPlace,
           address: rawData.address || generatedAddress || undefined,
-          // Detailed address fields
           province: formatRegion(rawData.province),
           regency: formatRegion(rawData.regency),
           district: formatRegion(rawData.district),
@@ -942,7 +992,6 @@ teachersRoute.post("/import", requirePermission("/apps/teachers"), async (c) => 
           postalCode: rawData.postalCode
             ? String(rawData.postalCode)
             : undefined,
-
           phone: rawData.phone ? String(rawData.phone) : undefined,
           email: rawData.email,
           position: rawData.position,

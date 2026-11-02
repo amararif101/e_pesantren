@@ -37,6 +37,7 @@ import rolesRoute from "./roles";
 import parentDashboardRoute from "./parent-dashboard";
 import pushRoute from "./push";
 import analyticsRoute from "./analytics";
+import structuralRoute from "./structural";
 
 export {
   authRoute,
@@ -77,4 +78,5 @@ export {
   analyticsRoute,
   studentLeavesRoute,
   savingsRoute,
+  structuralRoute,
 };

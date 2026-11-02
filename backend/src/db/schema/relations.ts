@@ -1,12 +1,18 @@
 import { relations } from "drizzle-orm";
 import { teachers } from "./teachers";
 import { divisions, teacherDivisions } from "./divisions";
+import {
+  structuralUnits,
+  structuralRoles,
+  teacherStructuralAssignments,
+} from "./structural-roles";
 import { pharmacies, pharmacyPharmacists, medicines } from "./clinic";
 
 import { salaryGrades, positionAllowances } from "./salary";
 
 export const teachersRelations = relations(teachers, ({ many, one }) => ({
   teacherDivisions: many(teacherDivisions),
+  structuralAssignments: many(teacherStructuralAssignments),
   pharmacyPharmacists: many(pharmacyPharmacists),
   salaryGrade: one(salaryGrades, {
     fields: [teachers.salaryGradeId],
@@ -32,6 +38,51 @@ export const teacherDivisionsRelations = relations(
     division: one(divisions, {
       fields: [teacherDivisions.divisionId],
       references: [divisions.id],
+    }),
+  })
+);
+
+export const structuralUnitsRelations = relations(
+  structuralUnits,
+  ({ one, many }) => ({
+    parent: one(structuralUnits, {
+      fields: [structuralUnits.parentId],
+      references: [structuralUnits.id],
+      relationName: "structural_unit_hierarchy",
+    }),
+    children: many(structuralUnits, {
+      relationName: "structural_unit_hierarchy",
+    }),
+    defaultRoles: many(structuralRoles),
+    assignments: many(teacherStructuralAssignments),
+  })
+);
+
+export const structuralRolesRelations = relations(
+  structuralRoles,
+  ({ one, many }) => ({
+    defaultUnit: one(structuralUnits, {
+      fields: [structuralRoles.defaultUnitId],
+      references: [structuralUnits.id],
+    }),
+    assignments: many(teacherStructuralAssignments),
+  })
+);
+
+export const teacherStructuralAssignmentsRelations = relations(
+  teacherStructuralAssignments,
+  ({ one }) => ({
+    teacher: one(teachers, {
+      fields: [teacherStructuralAssignments.teacherId],
+      references: [teachers.id],
+    }),
+    structuralRole: one(structuralRoles, {
+      fields: [teacherStructuralAssignments.structuralRoleId],
+      references: [structuralRoles.id],
+    }),
+    structuralUnit: one(structuralUnits, {
+      fields: [teacherStructuralAssignments.structuralUnitId],
+      references: [structuralUnits.id],
     }),
   })
 );

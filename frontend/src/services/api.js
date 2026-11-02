@@ -1764,8 +1764,33 @@ export const tahfidzApi = {
       method: "DELETE",
     });
   },
-  async canBackdate() {
-    return request("/api/tahfidz/can-backdate");
+  async canBackdate(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(query ? `/api/tahfidz/can-backdate?${query}` : "/api/tahfidz/can-backdate");
+  },
+  async getBackdateStatus(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(
+      query ? `/api/tahfidz/backdate-status?${query}` : "/api/tahfidz/backdate-status"
+    );
+  },
+  async getBackdateRequests(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(
+      query ? `/api/tahfidz/backdate-requests?${query}` : "/api/tahfidz/backdate-requests"
+    );
+  },
+  async createBackdateRequest(data) {
+    return request("/api/tahfidz/backdate-requests", {
+      method: "POST",
+      body: data,
+    });
+  },
+  async reviewBackdateRequest(id, data) {
+    return request(`/api/tahfidz/backdate-requests/${id}/review`, {
+      method: "PUT",
+      body: data,
+    });
   },
   async getMonitoringDashboard(date) {
     const query = date ? `?date=${date}` : "";
@@ -2356,3 +2381,80 @@ export const savingsApi = {
 
 
 
+// ============================================
+// STRUCTURAL ROLE HIERARCHY API (PESANTREN)
+// Separated from HR/Payroll Divisions
+// ============================================
+export const structuralApi = {
+  // Current user's structural profile & permissions
+  async getMe() {
+    return request("/api/structural/me");
+  },
+
+  // Seed default structural units & roles from Pesantren hierarchy
+  async seedDefaults() {
+    return request("/api/structural/seed-defaults", { method: "POST" });
+  },
+
+  // Structural Units (Divisi / Bagian / Madrasah / Unit Struktural)
+  async getUnits(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(query ? `/api/structural/units?${query}` : "/api/structural/units");
+  },
+  async getUnitById(id) {
+    return request(`/api/structural/units/${id}`);
+  },
+  async createUnit(data) {
+    return request("/api/structural/units", { method: "POST", body: data });
+  },
+  async updateUnit(id, data) {
+    return request(`/api/structural/units/${id}`, { method: "PUT", body: data });
+  },
+  async deleteUnit(id) {
+    return request(`/api/structural/units/${id}`, { method: "DELETE" });
+  },
+
+  // Structural Roles (Master Jabatan Struktural & PJ)
+  async getRoles(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(query ? `/api/structural/roles?${query}` : "/api/structural/roles");
+  },
+  async getRoleById(id) {
+    return request(`/api/structural/roles/${id}`);
+  },
+  async createRole(data) {
+    return request("/api/structural/roles", { method: "POST", body: data });
+  },
+  async updateRole(id, data) {
+    return request(`/api/structural/roles/${id}`, { method: "PUT", body: data });
+  },
+  async deleteRole(id) {
+    return request(`/api/structural/roles/${id}`, { method: "DELETE" });
+  },
+
+  // Teacher Structural Assignments (Penugasan Jabatan Guru - Multi-Role)
+  async getAssignments(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(
+      query ? `/api/structural/assignments?${query}` : "/api/structural/assignments"
+    );
+  },
+  async getTeacherProfile(teacherId) {
+    return request(`/api/structural/teachers/${teacherId}`);
+  },
+  async createAssignment(data) {
+    return request("/api/structural/assignments", { method: "POST", body: data });
+  },
+  async updateAssignment(id, data) {
+    return request(`/api/structural/assignments/${id}`, { method: "PUT", body: data });
+  },
+  async deleteAssignment(id) {
+    return request(`/api/structural/assignments/${id}`, { method: "DELETE" });
+  },
+  async syncTeacherAssignments(teacherId, assignments) {
+    return request(`/api/structural/teachers/${teacherId}/sync`, {
+      method: "PUT",
+      body: { assignments },
+    });
+  },
+};

@@ -19,7 +19,9 @@ export function getDefaultPermission(role: string, routePath: string): boolean {
   // Tahfidz monitoring dashboard is admin-only by default; division heads,
   // management, or anyone else who needs it must be granted access
   // explicitly via Security > Roles.
+  // Tahfidz monitoring dashboard and Structural Roles management are admin-only by default
   if (routePath === "/apps/tahfidz/monitoring") return false;
+  if (routePath === "/apps/structural") return false;
 
   // Teacher permissions
   if (role === "teacher") {
@@ -64,6 +66,7 @@ export function getDefaultPermission(role: string, routePath: string): boolean {
       routePath.startsWith("/apps/teacher") ||
       routePath.startsWith("/apps/salary") ||
       routePath.startsWith("/apps/divisions") ||
+      routePath.startsWith("/apps/structural") ||
       routePath.startsWith("/apps/attendance-recap") ||
       routePath.startsWith("/apps/attendance/approvals")
     ) {
