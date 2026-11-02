@@ -77,8 +77,10 @@ async function runSafeMigrations() {
             errMsg.includes("Duplicate column name") ||
             errMsg.includes("already exists") ||
             errMsg.includes("Duplicate key") ||
+            errMsg.includes("Duplicate foreign key") ||
             errCode === "ER_TABLE_EXISTS_ERROR" ||
             errCode === "ER_DUP_KEYNAME" ||
+            errCode === "ER_FK_DUP_NAME" ||
             errCode === "ER_CANT_DROP_FIELD_OR_KEY"
           ) {
             console.warn(`  Notice: statement in ${tag} already applied (${errMsg.slice(0, 100)}...). Continuing.`);
