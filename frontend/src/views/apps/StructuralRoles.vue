@@ -890,14 +890,14 @@ async function openAssigneesModal(roleItem) {
 
   try {
     const res = await structuralApi.getRoleById(roleItem.id);
-    const assignments = res?.data?.assignments || [];
-    assigneesModal.assignees = assignments
+    const rawHolders = res?.data?.holders || res?.data?.assignments || [];
+    assigneesModal.assignees = rawHolders
       .filter((a) => a.status === "active")
       .map((a) => ({
-        id: a.teacherId,
-        assignmentId: a.id,
-        fullName: a.teacherName,
-        nip: a.teacherNip || "-",
+        id: a.teacherId || a.id,
+        assignmentId: a.assignmentId || a.id,
+        fullName: a.fullName || a.teacherName,
+        nip: a.nip || a.teacherNip || "-",
         payrollDivisionLabel: a.unitName || roleItem.defaultUnitName || "",
       }));
   } catch (e) {
@@ -915,8 +915,9 @@ function closeAssigneesModal() {
 }
 
 async function addTeacherToRole(teacher) {
-  if (!assigneesModal.roleItem) return;
+  if (!assigneesModal.roleItem || assigneesModal.loading) return;
   assigneesModal.error = "";
+  assigneesModal.loading = true;
   try {
     await structuralApi.createAssignment({
       teacherId: teacher.id,
@@ -927,17 +928,20 @@ async function addTeacherToRole(teacher) {
     await openAssigneesModal(assigneesModal.roleItem);
   } catch (e) {
     assigneesModal.error = e.message || "Gagal menambahkan guru ke jabatan ini";
+    assigneesModal.loading = false;
   }
 }
 
 async function removeTeacherFromRole(assigneeItem) {
-  if (!assigneeItem?.assignmentId) return;
+  if (!assigneeItem?.assignmentId || assigneesModal.loading) return;
   assigneesModal.error = "";
+  assigneesModal.loading = true;
   try {
     await structuralApi.deleteAssignment(assigneeItem.assignmentId);
     await openAssigneesModal(assigneesModal.roleItem);
   } catch (e) {
     assigneesModal.error = e.message || "Gagal mencopot jabatan";
+    assigneesModal.loading = false;
   }
 }
 

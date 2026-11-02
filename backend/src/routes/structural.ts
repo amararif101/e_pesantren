@@ -1050,11 +1050,25 @@ structuralRoute.get("/roles/:id", async (c) => {
       .where(eq(teacherStructuralAssignments.structuralRoleId, id))
       .orderBy(asc(teachers.fullName));
 
+    const assignmentsFormatted = holders.map((h) => ({
+      id: h.assignmentId,
+      assignmentId: h.assignmentId,
+      teacherId: h.teacherId,
+      teacherName: h.fullName,
+      teacherNip: h.nip,
+      unitName: h.unitName,
+      status: h.status,
+      isPrimary: h.isPrimary,
+      academicYear: h.academicYear,
+      assignmentDetail: h.assignmentDetail,
+    }));
+
     return c.json({
       success: true,
       data: {
         ...role,
         holders,
+        assignments: assignmentsFormatted,
       },
     });
   } catch (error: any) {
@@ -1492,6 +1506,36 @@ structuralRoute.post(
           ? data.structuralUnitId
           : role.defaultUnitId ?? null;
 
+      // Cek apakah penugasan guru untuk role dan unit ini sudah ada (idempotent check)
+      const existingAssignment =
+        await db.query.teacherStructuralAssignments.findFirst({
+          where: and(
+            eq(teacherStructuralAssignments.teacherId, data.teacherId),
+            eq(teacherStructuralAssignments.structuralRoleId, data.structuralRoleId),
+            targetUnitId !== null
+              ? eq(teacherStructuralAssignments.structuralUnitId, targetUnitId)
+              : sql`${teacherStructuralAssignments.structuralUnitId} IS NULL`
+          ),
+          with: {
+            structuralRole: true,
+            structuralUnit: true,
+          },
+        });
+
+      if (existingAssignment) {
+        if (existingAssignment.status !== (data.status ?? "active")) {
+          await db
+            .update(teacherStructuralAssignments)
+            .set({ status: data.status ?? "active", updatedAt: new Date() })
+            .where(eq(teacherStructuralAssignments.id, existingAssignment.id));
+        }
+        return c.json({
+          success: true,
+          message: "Guru sudah terdaftar pada jabatan struktural ini",
+          data: existingAssignment,
+        });
+      }
+
       if (data.isPrimary) {
         await db
           .update(teacherStructuralAssignments)
@@ -1530,7 +1574,9 @@ structuralRoute.post(
       });
     } catch (error: any) {
       console.error("Create structural assignment error:", error);
-      if (error.message?.includes("Duplicate entry")) {
+      const errMsg = `${error.message || ""} ${error.cause?.message || ""} ${error.cause?.sqlMessage || ""}`;
+      const errCode = error.code || error.cause?.code;
+      if (errCode === "ER_DUP_ENTRY" || errMsg.includes("Duplicate entry")) {
         return c.json(
           {
             success: false,
