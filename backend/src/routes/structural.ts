@@ -90,24 +90,24 @@ structuralRoute.post(
         // Level 2: Divisi Struktural Pesantren
         {
           code: "DIV_MS",
-          name: "MS (Madrasah Salafiyah / MTs-MA)",
+          name: "MS (Markaz Syariah)",
           type: "division",
           parentCode: "PPMH",
-          description: "Divisi Pendidikan Tingkat Menengah (MTs & MA)",
+          description: "Divisi Markaz Syariah (Pendidikan MTs & MA)",
         },
         {
           code: "DIV_MT",
-          name: "MT (Ma'had Tahfizh)",
+          name: "MT (Markaz Tahfizh)",
           type: "division",
           parentCode: "PPMH",
-          description: "Divisi Ma'had Tahfizh",
+          description: "Divisi Markaz Tahfizh",
         },
         {
           code: "DIV_MT_CIRACAS",
-          name: "MT Ciracas",
+          name: "Markaz Dakwah (MT Ciracas)",
           type: "division",
           parentCode: "PPMH",
-          description: "Divisi Ma'had Tahfizh Cabang Ciracas",
+          description: "Divisi Markaz Dakwah Cabang Ciracas",
         },
         {
           code: "DIV_MI",
@@ -218,8 +218,20 @@ structuralRoute.post(
       existingUnits.forEach((u) => unitIdByCode.set(u.code, u.id));
 
       let unitsCreated = 0;
+      let unitsUpdated = 0;
       for (const item of defaultUnits) {
-        if (unitIdByCode.has(item.code)) continue;
+        if (unitIdByCode.has(item.code)) {
+          const existingId = unitIdByCode.get(item.code)!;
+          await db
+            .update(structuralUnits)
+            .set({
+              name: item.name,
+              description: item.description,
+            })
+            .where(eq(structuralUnits.id, existingId));
+          unitsUpdated++;
+          continue;
+        }
         const parentId = item.parentCode
           ? unitIdByCode.get(item.parentCode) ?? null
           : null;
@@ -271,7 +283,7 @@ structuralRoute.post(
           rankLevel: 2,
           defaultUnitCode: "DIV_MS",
           canBackdateTahfidz: true,
-          description: "Kepala Divisi Madrasah Salafiyah (MS)",
+          description: "Kepala Divisi Markaz Syariah (MS)",
         },
         {
           code: "SEKRETARIS_MS",
@@ -513,8 +525,20 @@ structuralRoute.post(
       const existingRoleCodes = new Set(existingRoles.map((r) => r.code));
 
       let rolesCreated = 0;
+      let rolesUpdated = 0;
       for (const roleItem of defaultRoles) {
-        if (existingRoleCodes.has(roleItem.code)) continue;
+        if (existingRoleCodes.has(roleItem.code)) {
+          await db
+            .update(structuralRoles)
+            .set({
+              name: roleItem.name,
+              canBackdateTahfidz: roleItem.canBackdateTahfidz,
+              description: roleItem.description,
+            })
+            .where(eq(structuralRoles.code, roleItem.code));
+          rolesUpdated++;
+          continue;
+        }
         const defaultUnitId = roleItem.defaultUnitCode
           ? unitIdByCode.get(roleItem.defaultUnitCode) ?? null
           : null;
@@ -533,10 +557,12 @@ structuralRoute.post(
 
       return c.json({
         success: true,
-        message: `Data default struktur pesantren berhasil diinisialisasi (${unitsCreated} unit baru, ${rolesCreated} role baru)`,
+        message: `Data default struktur pesantren berhasil disinkronkan (${unitsCreated} unit baru, ${unitsUpdated} unit diperbarui, ${rolesCreated} role baru, ${rolesUpdated} role diselaraskan)`,
         data: {
           unitsCreated,
+          unitsUpdated,
           rolesCreated,
+          rolesUpdated,
         },
       });
     } catch (error: any) {
@@ -977,10 +1003,14 @@ structuralRoute.get("/roles", async (c) => {
       holderCounts.map((r) => [r.roleId, Number(r.count || 0)])
     );
 
-    const data = roles.map((r) => ({
-      ...r,
-      holderCount: countByRoleId.get(r.id) || 0,
-    }));
+    const data = roles.map((r) => {
+      const count = countByRoleId.get(r.id) || 0;
+      return {
+        ...r,
+        holderCount: count,
+        activeAssigneesCount: count,
+      };
+    });
 
     return c.json({
       success: true,

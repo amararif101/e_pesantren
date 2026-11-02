@@ -70,8 +70,8 @@
         :loading="loadingRoles"
         :pagination="rolePagination"
         :viewMode="viewMode"
-        :searchQuery="searchQuery"
-        @search="onSearchInput"
+        :search="searchQuery"
+        @update:search="onSearchInput"
         @update:limit="changeLimit"
         @page-change="changePage"
         @update:viewMode="(v) => (viewMode = v)"
@@ -114,16 +114,21 @@
         <template #cell-members="{ item }">
           <button
             @click="openAssigneesModal(item)"
-            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors border border-amber-200"
+            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors border"
+            :class="
+              (item.activeAssigneesCount || item.holderCount || 0) > 0
+                ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+            "
           >
             <Icon icon="solar:users-group-rounded-bold-duotone" class="text-sm" />
-            {{ item.activeAssigneesCount || 0 }} guru menjabat
+            {{ item.activeAssigneesCount ?? item.holderCount ?? 0 }} guru menjabat
           </button>
         </template>
 
         <!-- Cell: Action -->
         <template #cell-action="{ item }">
-          <div class="flex items-center gap-1">
+          <div class="flex items-center justify-end gap-1">
             <button
               @click="openAssigneesModal(item)"
               class="p-2 rounded-lg hover:bg-amber-50 text-slate-500 hover:text-[#602515] transition-colors"
@@ -198,7 +203,7 @@
                 class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#602515] hover:bg-[#4a1c10] text-white transition-colors text-xs font-semibold"
               >
                 <Icon icon="solar:users-group-rounded-bold-duotone" />
-                Kelola Pejabat ({{ item.activeAssigneesCount || 0 }} Guru)
+                Kelola Pejabat ({{ item.activeAssigneesCount ?? item.holderCount ?? 0 }} Guru)
               </button>
             </div>
           </div>
@@ -213,11 +218,14 @@
         description="Hierarki unit organisasi pesantren (Lembaga, Divisi Pendidikan, Madrasah, Bagian, Unit PJ)"
         icon="solar:buildings-3-bold-duotone"
         :columns="unitColumns"
-        :items="units"
+        :items="paginatedUnits"
         :loading="loadingUnits"
+        :pagination="unitPagination"
         :viewMode="viewMode"
-        :searchQuery="unitSearchQuery"
-        @search="(q) => (unitSearchQuery = q)"
+        :search="unitSearchQuery"
+        @update:search="onUnitSearchInput"
+        @update:limit="changeUnitLimit"
+        @page-change="changeUnitPage"
         @update:viewMode="(v) => (viewMode = v)"
       >
         <template #header-actions>
@@ -231,32 +239,113 @@
           </button>
         </template>
 
+        <!-- Cell: Name -->
+        <template #cell-name="{ item }">
+          <div class="font-semibold text-slate-800">{{ item.name }}</div>
+          <div v-if="item.description" class="text-xs text-slate-500 line-clamp-1 mt-0.5">
+            {{ item.description }}
+          </div>
+        </template>
+
+        <!-- Cell: Code -->
+        <template #cell-code="{ item }">
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+            {{ item.code }}
+          </span>
+        </template>
+
+        <!-- Cell: Type -->
         <template #cell-type="{ item }">
           <span class="px-2.5 py-1 rounded-md text-xs font-semibold uppercase bg-amber-50 text-amber-800">
             {{ formatUnitType(item.type) }}
           </span>
         </template>
 
+        <!-- Cell: Parent -->
         <template #cell-parent="{ item }">
-          <span class="text-xs text-slate-600">
-            {{ getUnitNameById(item.parentId) || "-" }}
+          <span class="text-xs text-slate-600 font-medium">
+            {{ getUnitNameById(item.parentId) || item.parentName || "-" }}
           </span>
         </template>
 
+        <!-- Cell: Member Count -->
+        <template #cell-memberCount="{ item }">
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-slate-700">
+            <Icon icon="solar:users-group-rounded-linear" class="text-sm text-slate-400" />
+            {{ item.memberCount || 0 }} Guru
+          </span>
+        </template>
+
+        <!-- Cell: Action -->
         <template #cell-action="{ item }">
-          <div class="flex items-center gap-1">
+          <div class="flex items-center justify-end gap-1">
             <button
               @click="openEditUnit(item)"
               class="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-600 transition-colors"
+              title="Edit Unit"
             >
               <Icon icon="solar:pen-2-bold-duotone" />
             </button>
             <button
               @click="deleteUnitItem(item)"
               class="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-red-600 transition-colors"
+              title="Hapus Unit"
             >
               <Icon icon="solar:trash-bin-trash-bold-duotone" />
             </button>
+          </div>
+        </template>
+
+        <!-- Card View for Unit -->
+        <template #card-item="{ item }">
+          <div class="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col relative">
+            <div class="absolute top-3 right-3 flex gap-1">
+              <button
+                @click="openEditUnit(item)"
+                class="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
+                title="Edit Unit"
+              >
+                <Icon icon="solar:pen-2-bold-duotone" class="text-lg" />
+              </button>
+              <button
+                @click="deleteUnitItem(item)"
+                class="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                title="Hapus Unit"
+              >
+                <Icon icon="solar:trash-bin-trash-bold-duotone" class="text-lg" />
+              </button>
+            </div>
+
+            <div class="mb-3 pr-14">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                  {{ item.code }}
+                </span>
+                <span class="px-2 py-0.5 rounded text-[11px] font-semibold uppercase bg-amber-50 text-amber-800">
+                  {{ formatUnitType(item.type) }}
+                </span>
+              </div>
+              <h3 class="font-bold text-slate-800 text-base">
+                {{ item.name }}
+              </h3>
+              <p class="text-xs text-slate-500 mt-1">
+                Induk: <strong>{{ getUnitNameById(item.parentId) || item.parentName || "Root (Tanpa Induk)" }}</strong>
+              </p>
+            </div>
+
+            <p class="text-xs text-slate-600 mb-4 line-clamp-2 min-h-[32px]">
+              {{ item.description || "Tidak ada deskripsi" }}
+            </p>
+
+            <div class="mt-auto pt-3 border-t flex items-center justify-between text-xs text-slate-500">
+              <span class="inline-flex items-center gap-1 font-medium">
+                <Icon icon="solar:users-group-rounded-linear" class="text-slate-400" />
+                {{ item.memberCount || 0 }} Guru Terkait
+              </span>
+              <span :class="item.isActive !== false ? 'text-emerald-600 font-medium' : 'text-slate-400'">
+                {{ item.isActive !== false ? '● Aktif' : '○ Nonaktif' }}
+              </span>
+            </div>
           </div>
         </template>
       </DataTable>
@@ -551,7 +640,7 @@ import StatusModal from "@/components/ui/StatusModal.vue";
 import { structuralApi, teachersApi } from "@/services/api";
 
 const activeTab = ref("roles");
-const viewMode = ref("list");
+const viewMode = ref("table");
 const searchQuery = ref("");
 const unitSearchQuery = ref("");
 
@@ -572,22 +661,29 @@ const rolePagination = reactive({
   totalPages: 1,
 });
 
+const unitPagination = reactive({
+  page: 1,
+  limit: 15,
+  total: 0,
+  totalPages: 1,
+});
+
 const roleColumns = [
-  { key: "name", label: "Nama Jabatan Struktural", sortable: true },
-  { key: "code", label: "Kode", sortable: true },
-  { key: "unitName", label: "Unit / Bagian Induk" },
-  { key: "canBackdateTahfidz", label: "Otoritas Tahfizh" },
-  { key: "members", label: "Pejabat Aktif" },
-  { key: "action", label: "Aksi" },
+  { field: "name", key: "name", label: "Nama Jabatan Struktural", sortable: true },
+  { field: "code", key: "code", label: "Kode", sortable: true },
+  { field: "unitName", key: "unitName", label: "Unit / Bagian Induk" },
+  { field: "canBackdateTahfidz", key: "canBackdateTahfidz", label: "Otoritas Tahfizh" },
+  { field: "members", key: "members", label: "Pejabat Aktif" },
+  { field: "action", key: "action", label: "Aksi", align: "right" },
 ];
 
 const unitColumns = [
-  { key: "name", label: "Nama Unit / Bagian", sortable: true },
-  { key: "code", label: "Kode", sortable: true },
-  { key: "type", label: "Tipe" },
-  { key: "parent", label: "Unit Induk" },
-  { key: "description", label: "Deskripsi" },
-  { key: "action", label: "Aksi" },
+  { field: "name", key: "name", label: "Nama Unit / Bagian", sortable: true },
+  { field: "code", key: "code", label: "Kode", sortable: true },
+  { field: "type", key: "type", label: "Tipe" },
+  { field: "parent", key: "parent", label: "Unit Induk" },
+  { field: "memberCount", key: "memberCount", label: "Guru Menjabat" },
+  { field: "action", key: "action", label: "Aksi", align: "right" },
 ];
 
 const statusModal = reactive({
@@ -633,6 +729,38 @@ function changeLimit(l) {
 }
 function changePage(p) {
   rolePagination.page = p;
+}
+
+const filteredUnits = computed(() => {
+  const q = unitSearchQuery.value.trim().toLowerCase();
+  if (!q) return units.value;
+  return units.value.filter(
+    (u) =>
+      u.name.toLowerCase().includes(q) ||
+      u.code.toLowerCase().includes(q) ||
+      (u.description || "").toLowerCase().includes(q) ||
+      (getUnitNameById(u.parentId) || u.parentName || "").toLowerCase().includes(q)
+  );
+});
+
+const paginatedUnits = computed(() => {
+  const total = filteredUnits.value.length;
+  unitPagination.total = total;
+  unitPagination.totalPages = Math.max(1, Math.ceil(total / unitPagination.limit));
+  const start = (unitPagination.page - 1) * unitPagination.limit;
+  return filteredUnits.value.slice(start, start + unitPagination.limit);
+});
+
+function onUnitSearchInput(q) {
+  unitSearchQuery.value = q;
+  unitPagination.page = 1;
+}
+function changeUnitLimit(l) {
+  unitPagination.limit = l;
+  unitPagination.page = 1;
+}
+function changeUnitPage(p) {
+  unitPagination.page = p;
 }
 
 function getUnitNameById(id) {
@@ -926,6 +1054,7 @@ async function addTeacherToRole(teacher) {
       status: "active",
     });
     await openAssigneesModal(assigneesModal.roleItem);
+    await loadAllData();
   } catch (e) {
     assigneesModal.error = e.message || "Gagal menambahkan guru ke jabatan ini";
     assigneesModal.loading = false;
@@ -939,6 +1068,7 @@ async function removeTeacherFromRole(assigneeItem) {
   try {
     await structuralApi.deleteAssignment(assigneeItem.assignmentId);
     await openAssigneesModal(assigneesModal.roleItem);
+    await loadAllData();
   } catch (e) {
     assigneesModal.error = e.message || "Gagal mencopot jabatan";
     assigneesModal.loading = false;

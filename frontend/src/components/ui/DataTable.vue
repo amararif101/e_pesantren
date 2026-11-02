@@ -47,7 +47,7 @@
             @click="$emit('update:viewMode', 'table')"
             class="p-2 rounded-md transition-all flex items-center justify-center"
             :class="
-              viewMode === 'table'
+              (viewMode === 'table' || viewMode === 'list')
                 ? 'bg-white shadow text-[#602515]'
                 : 'text-slate-500 hover:text-slate-700'
             "
@@ -116,7 +116,7 @@
       <!-- Desktop table container -->
       <!-- Added rounded corners to mask content since parent is not overflow-hidden -->
       <div
-        v-if="viewMode === 'table'"
+        v-if="viewMode === 'table' || viewMode === 'list'"
         class="relative w-px min-w-full overflow-x-auto scrolling-touch"
       >
         <div v-if="loading" class="p-4">
@@ -140,7 +140,7 @@
                   col.headerClass || '',
                   col.sticky ? 'sticky z-30 bg-white' : '',
                   col.stickyClass || '',
-                  col.align === 'center' ? 'text-center' : 'text-left',
+                  col.align === 'center' ? 'text-center' : (col.align === 'right' ? 'text-right' : 'text-left'),
                 ]"
               >
                 <div
@@ -175,7 +175,7 @@
             >
               <td
                 v-for="col in columns"
-                :key="col.field"
+                :key="col.field || col.key"
                 :class="[
                   'p-3 md:p-4',
                   col.cellClass || '',
@@ -186,8 +186,8 @@
                   col.align === 'center' ? 'text-center' : 'text-left',
                 ]"
               >
-                <slot :name="`cell-${col.field}`" :item="item" :index="idx">
-                  {{ item[col.field] }}
+                <slot :name="`cell-${col.field || col.key}`" :item="item" :index="idx">
+                  {{ item[col.field || col.key] }}
                 </slot>
               </td>
             </tr>
