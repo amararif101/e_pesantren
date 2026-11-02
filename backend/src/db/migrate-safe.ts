@@ -71,11 +71,17 @@ async function runSafeMigrations() {
           await db.execute(sql.raw(stmt));
           console.log(`  Executed statement in ${tag}`);
         } catch (err: any) {
+          const errMsg = `${err.message || ""} ${err.cause?.message || ""} ${err.cause?.sqlMessage || ""}`;
+          const errCode = err.code || err.cause?.code;
           if (
-            err.message?.includes("Duplicate column name") ||
-            err.message?.includes("already exists")
+            errMsg.includes("Duplicate column name") ||
+            errMsg.includes("already exists") ||
+            errMsg.includes("Duplicate key") ||
+            errCode === "ER_TABLE_EXISTS_ERROR" ||
+            errCode === "ER_DUP_KEYNAME" ||
+            errCode === "ER_CANT_DROP_FIELD_OR_KEY"
           ) {
-            console.warn(`  Notice: statement in ${tag} already applied (${err.message}). Continuing.`);
+            console.warn(`  Notice: statement in ${tag} already applied (${errMsg.slice(0, 100)}...). Continuing.`);
           } else {
             console.error(`  Error in ${tag}:`, err.message);
             throw err;
