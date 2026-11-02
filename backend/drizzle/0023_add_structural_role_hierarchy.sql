@@ -48,8 +48,8 @@ CREATE TABLE `teacher_structural_assignments` (
 --> statement-breakpoint
 ALTER TABLE `structural_roles` ADD CONSTRAINT `structural_roles_default_unit_id_structural_units_id_fk` FOREIGN KEY (`default_unit_id`) REFERENCES `structural_units`(`id`) ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `teacher_structural_assignments` ADD CONSTRAINT `teacher_structural_assignments_teacher_id_teachers_id_fk` FOREIGN KEY (`teacher_id`) REFERENCES `teachers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `teacher_structural_assignments` ADD CONSTRAINT `teacher_structural_assignments_structural_role_id_structural_roles_id_fk` FOREIGN KEY (`structural_role_id`) REFERENCES `structural_roles`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `teacher_structural_assignments` ADD CONSTRAINT `teacher_structural_assignments_structural_unit_id_structural_units_id_fk` FOREIGN KEY (`structural_unit_id`) REFERENCES `structural_units`(`id`) ON DELETE set null ON UPDATE no action;
+ALTER TABLE `teacher_structural_assignments` ADD CONSTRAINT `fk_tsa_structural_role_id` FOREIGN KEY (`structural_role_id`) REFERENCES `structural_roles`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `teacher_structural_assignments` ADD CONSTRAINT `fk_tsa_structural_unit_id` FOREIGN KEY (`structural_unit_id`) REFERENCES `structural_units`(`id`) ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 CREATE TABLE `tahfidz_backdate_requests` (
 	`id` int AUTO_INCREMENT NOT NULL,
@@ -67,5 +67,5 @@ CREATE TABLE `tahfidz_backdate_requests` (
 	CONSTRAINT `tahfidz_backdate_requests_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
-ALTER TABLE `tahfidz_backdate_requests` ADD CONSTRAINT `tahfidz_backdate_requests_teacher_id_teachers_id_fk` FOREIGN KEY (`teacher_id`) REFERENCES `teachers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `tahfidz_backdate_requests` ADD CONSTRAINT `tahfidz_backdate_requests_reviewed_by_teacher_id_teachers_id_fk` FOREIGN KEY (`reviewed_by_teacher_id`) REFERENCES `teachers`(`id`) ON DELETE set null ON UPDATE no action;
+ALTER TABLE `tahfidz_backdate_requests` ADD CONSTRAINT `fk_tbr_teacher_id` FOREIGN KEY (`teacher_id`) REFERENCES `teachers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `tahfidz_backdate_requests` ADD CONSTRAINT `fk_tbr_reviewed_by_teacher_id` FOREIGN KEY (`reviewed_by_teacher_id`) REFERENCES `teachers`(`id`) ON DELETE set null ON UPDATE no action;
