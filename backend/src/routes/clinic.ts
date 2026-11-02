@@ -1109,7 +1109,7 @@ clinicRoute.delete(
 // ============ EXAMINATIONS (Updated) ============
 
 clinicRoute.get("/examinations", async (c) => {
-  const { clinicPatientId, patientId, refId, name, patientType } = c.req.query();
+  const { clinicPatientId, patientId, refId, name, patientType, startDate, endDate, date, gender, limit } = c.req.query();
 
   const conditions = [];
 
@@ -1120,6 +1120,27 @@ clinicRoute.get("/examinations", async (c) => {
   const targetPatientId = patientId || refId;
   if (targetPatientId) {
     conditions.push(eq(healthExaminations.patientId, Number(targetPatientId)));
+  }
+
+  if (patientType && ["student", "teacher", "external"].includes(patientType)) {
+    conditions.push(eq(healthExaminations.patientType, patientType as any));
+  }
+
+  if (gender && ["L", "P"].includes(gender)) {
+    conditions.push(
+      sql`(${healthExaminations.clinicPatientId} IS NULL OR ${clinicPatients.gender} = ${gender})`
+    );
+  }
+
+  if (date) {
+    conditions.push(sql`DATE(${healthExaminations.examinationDate}) = ${date}`);
+  } else {
+    if (startDate) {
+      conditions.push(sql`DATE(${healthExaminations.examinationDate}) >= ${startDate}`);
+    }
+    if (endDate) {
+      conditions.push(sql`DATE(${healthExaminations.examinationDate}) <= ${endDate}`);
+    }
   }
 
   if (name) {
@@ -1176,9 +1197,11 @@ clinicRoute.get("/examinations", async (c) => {
     query = query.where(and(...conditions));
   }
 
-  const list = await query
-    .orderBy(desc(healthExaminations.examinationDate))
-    .limit(50);
+  const queryWithOrder = query.orderBy(desc(healthExaminations.examinationDate));
+  const parsedLimit = limit ? parseInt(limit) : 50;
+  const list = (limit === "all" || limit === "0" || parsedLimit <= 0)
+    ? await queryWithOrder
+    : await queryWithOrder.limit(parsedLimit);
 
   const mapped = await Promise.all(list.map(async (l) => {
     let classInfo = null;
