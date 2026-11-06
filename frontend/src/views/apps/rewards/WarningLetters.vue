@@ -97,6 +97,21 @@
         </span>
       </template>
 
+      <!-- Cell: Attachment / Berkas -->
+      <template #cell-attachment="{ item }">
+        <a
+          v-if="item.attachment"
+          :href="getFileUrl(item.attachment)"
+          target="_blank"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition-colors"
+          title="Lihat Berkas Surat SP"
+        >
+          <Icon :icon="isImageFile(item.attachment) ? 'solar:gallery-bold' : 'solar:document-bold'" class="text-sm" />
+          <span>Lihat Berkas</span>
+        </a>
+        <span v-else class="text-xs text-slate-400">-</span>
+      </template>
+
       <!-- Cell: Status -->
       <template #cell-status="{ item }">
         <span
@@ -187,6 +202,18 @@
             >
               "{{ item.reason }}"
             </p>
+
+            <!-- Card Attachment Link -->
+            <div v-if="item.attachment" class="mb-3">
+              <a
+                :href="getFileUrl(item.attachment)"
+                target="_blank"
+                class="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition-colors"
+              >
+                <Icon :icon="isImageFile(item.attachment) ? 'solar:gallery-bold' : 'solar:document-bold'" class="text-sm" />
+                <span>Lihat Berkas Surat SP</span>
+              </a>
+            </div>
 
             <div class="flex justify-end gap-2 border-t pt-3">
               <button
@@ -344,6 +371,87 @@
             ></textarea>
           </div>
 
+          <!-- Upload Berkas SP -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+              Berkas / Surat SP (PDF / Scan Gambar)
+            </label>
+
+            <!-- Dropzone / Upload Button -->
+            <div
+              v-if="!form.attachment && !uploadingFile"
+              @click="triggerFileInput"
+              class="border-2 border-dashed border-slate-300 hover:border-red-400 bg-slate-50 hover:bg-red-50/30 rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 group"
+            >
+              <div class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon icon="solar:upload-bold-duotone" class="text-xl text-slate-400 group-hover:text-red-500" />
+              </div>
+              <p class="text-xs font-medium text-slate-600">Klik untuk upload berkas surat SP</p>
+              <p class="text-[11px] text-slate-400">PDF, JPG, PNG, atau DOC (Maks. 25MB)</p>
+            </div>
+
+            <!-- Uploading State -->
+            <div
+              v-else-if="uploadingFile"
+              class="border border-slate-200 bg-slate-50 rounded-xl p-4 flex items-center justify-center gap-3 text-sm text-slate-600"
+            >
+              <Icon icon="svg-spinners:ring-resize" class="text-xl text-red-600" />
+              <span>Mengunggah berkas surat SP...</span>
+            </div>
+
+            <!-- Uploaded File Preview -->
+            <div
+              v-else-if="form.attachment"
+              class="border border-red-200 bg-red-50/50 rounded-xl p-3 flex items-center justify-between gap-3"
+            >
+              <div class="flex items-center gap-2.5 overflow-hidden">
+                <div class="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+                  <Icon :icon="isImageFile(form.attachment) ? 'solar:gallery-bold' : 'solar:document-bold'" class="text-lg" />
+                </div>
+                <div class="overflow-hidden">
+                  <p class="text-xs font-bold text-slate-800 truncate">
+                    {{ attachedFileName || "Berkas Surat SP" }}
+                  </p>
+                  <a
+                    :href="getFileUrl(form.attachment)"
+                    target="_blank"
+                    class="text-[11px] text-red-600 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <Icon icon="solar:eye-bold" class="text-xs" />
+                    Buka / Pratinjau Berkas
+                  </a>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  @click="triggerFileInput"
+                  class="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors"
+                  title="Ganti File"
+                >
+                  <Icon icon="solar:restart-bold" class="text-sm" />
+                </button>
+                <button
+                  type="button"
+                  @click="removeAttachment"
+                  class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors"
+                  title="Hapus File"
+                >
+                  <Icon icon="solar:trash-bin-trash-bold" class="text-sm" />
+                </button>
+              </div>
+            </div>
+
+            <input
+              ref="fileInput"
+              type="file"
+              class="hidden"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+              @change="handleFileUpload"
+            />
+          </div>
+
           <div class="flex justify-end gap-3 mt-6">
             <button
               type="button"
@@ -434,6 +542,10 @@ const statusModal = reactive({
   message: "",
 });
 
+const fileInput = ref(null);
+const uploadingFile = ref(false);
+const attachedFileName = ref("");
+
 const form = reactive({
   id: null,
   studentId: null,
@@ -443,6 +555,7 @@ const form = reactive({
   validUntil: "",
   reason: "",
   notes: "",
+  attachment: "",
 });
 
 const columns = [
@@ -452,6 +565,7 @@ const columns = [
   { field: "validUntil", label: "Berlaku Sampai" },
   { field: "status", label: "Status", sortable: true },
   { field: "reason", label: "Alasan" },
+  { field: "attachment", label: "Berkas SP", align: "center" },
   { field: "action", label: "Aksi", align: "right" },
 ];
 
@@ -484,6 +598,54 @@ const paginatedWarnings = computed(() => {
   const end = start + itemsPerPage.value;
   return filteredInfo.value.slice(start, end);
 });
+
+// File Attachment Helpers
+const getFileUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const base = import.meta.env.VITE_API_BASE_URL || "";
+  if (path.startsWith("/")) return `${base}${path}`;
+  return `${base}/${path}`;
+};
+
+const isImageFile = (url) => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|webp|gif)$/i.test(url);
+};
+
+function triggerFileInput() {
+  if (fileInput.value) fileInput.value.click();
+}
+
+async function handleFileUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  uploadingFile.value = true;
+  try {
+    const res = await warningsApi.uploadFile(file);
+    if (res && res.success && res.data) {
+      form.attachment = res.data.url || res.data.filePath;
+      attachedFileName.value = file.name;
+    } else if (res && res.url) {
+      form.attachment = res.url;
+      attachedFileName.value = file.name;
+    } else {
+      throw new Error("Gagal mengunggah file");
+    }
+  } catch (err) {
+    console.error("Upload error:", err);
+    showStatus("error", "Gagal Upload", err.message || "Gagal mengunggah berkas surat SP.");
+  } finally {
+    uploadingFile.value = false;
+    e.target.value = "";
+  }
+}
+
+function removeAttachment() {
+  form.attachment = "";
+  attachedFileName.value = "";
+}
 
 // Helpers
 const formatDate = (d) => {
@@ -544,6 +706,8 @@ function openModal(item = null) {
     form.validUntil = item.validUntil ? item.validUntil.split("T")[0] : "";
     form.reason = item.reason;
     form.notes = item.notes;
+    form.attachment = item.attachment || "";
+    attachedFileName.value = item.attachment ? item.attachment.split("/").pop() : "";
 
     // Find student name
     const s = students.value.find((x) => x.id === item.studentId);
@@ -558,6 +722,8 @@ function openModal(item = null) {
     form.validUntil = "";
     form.reason = "";
     form.notes = "";
+    form.attachment = "";
+    attachedFileName.value = "";
     studentSearch.value = "";
   }
   showModal.value = true;

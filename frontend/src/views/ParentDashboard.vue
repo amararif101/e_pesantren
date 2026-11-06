@@ -334,6 +334,16 @@
                     <p class="text-sm text-red-600 mt-1">
                       {{ warning.reason }}
                     </p>
+                    <div v-if="warning.attachment" class="mt-2.5">
+                      <a
+                        :href="getFileUrl(warning.attachment)"
+                        target="_blank"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-xs font-semibold transition-colors shadow-sm"
+                      >
+                        <Icon icon="solar:document-bold" class="text-sm" />
+                        <span>Unduh / Lihat Surat SP</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
 
@@ -652,6 +662,14 @@ function getPhotoUrl(photo) {
   if (photo.startsWith("http")) return photo;
   if (photo.startsWith("/api/")) return `${BASE_URL}${photo}`;
   return `${BASE_URL}/api/${photo}`;
+}
+
+function getFileUrl(path) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const base = import.meta.env.VITE_API_BASE_URL || "";
+  if (path.startsWith("/")) return `${base}${path}`;
+  return `${base}/${path}`;
 }
 
 function formatDate(dateStr) {

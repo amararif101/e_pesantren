@@ -817,6 +817,14 @@ export const rulesApi = {
 };
 
 export const warningsApi = {
+  async uploadFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request("/api/uploads", {
+      method: "POST",
+      body: formData,
+    });
+  },
   async getAll(params = {}) {
     const query = new URLSearchParams(params).toString();
     const endpoint = query ? `/api/warnings?${query}` : "/api/warnings";

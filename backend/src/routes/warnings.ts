@@ -23,6 +23,7 @@ const createWarningSchema = z.object({
     .optional(),
   reason: z.string().min(1, "Reason is required"),
   notes: z.string().optional(),
+  attachment: z.string().optional().nullable(),
 });
 
 const updateWarningSchema = createWarningSchema.partial().extend({
@@ -94,6 +95,7 @@ warningsRoute.post(
         validUntil: data.validUntil ? new Date(data.validUntil) : undefined,
         reason: data.reason,
         notes: data.notes,
+        attachment: data.attachment || null,
         issuedBy: user.userId,
         status: "active",
       });

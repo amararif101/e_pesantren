@@ -64,6 +64,7 @@ export const studentWarnings = mysqlTable("student_warnings", {
   validUntil: date("valid_until"), // Optional expiration
   reason: text("reason").notNull(),
   notes: text("notes"),
+  attachment: varchar("attachment", { length: 500 }),
   issuedBy: int("issued_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

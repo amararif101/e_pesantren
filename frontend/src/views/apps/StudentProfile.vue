@@ -637,6 +637,16 @@
                     <p class="text-xs text-slate-500 mt-1">
                       Berlaku sampai: {{ formatDate(item.validUntil) }}
                     </p>
+                    <div v-if="item.attachment" class="mt-2">
+                      <a
+                        :href="getFileUrl(item.attachment)"
+                        target="_blank"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition-colors"
+                      >
+                        <Icon icon="solar:document-bold" class="text-sm" />
+                        <span>Lihat Berkas Surat SP</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2190,6 +2200,14 @@ const statusIcons = {
   transferred: "solar:transfer-horizontal-bold",
   dropped: "solar:close-circle-bold",
 };
+
+function getFileUrl(path) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const base = import.meta.env.VITE_API_BASE_URL || "";
+  if (path.startsWith("/")) return `${base}${path}`;
+  return `${base}/${path}`;
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
