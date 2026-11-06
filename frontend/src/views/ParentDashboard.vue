@@ -18,7 +18,7 @@
                 Dashboard Orang Tua
               </h1>
               <p class="text-sm text-slate-500">
-                Pantau perkembangan anak Anda
+                Pantau perkembangan & pengajuan izin anak Anda
               </p>
             </div>
           </div>
@@ -87,7 +87,7 @@
         >
           <!-- Child Header -->
           <div class="bg-gradient-to-r from-primary-600 to-primary-700 p-4">
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center gap-4">
               <div
                 class="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center overflow-hidden"
               >
@@ -103,7 +103,7 @@
                   class="w-10 h-10 text-white"
                 />
               </div>
-              <div class="flex-1 text-white">
+              <div class="flex-1 min-w-[180px] text-white">
                 <h2 class="text-lg font-semibold">{{ child.fullName }}</h2>
                 <p v-if="child.fullNameAr" class="text-sm text-white/80 rtl">
                   {{ child.fullNameAr }}
@@ -115,8 +115,16 @@
                   >
                 </div>
               </div>
-              <!-- Report Card Buttons -->
-              <div class="flex items-center gap-2">
+              <!-- Quick Action & Report Card Buttons -->
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  @click="openLeaveModal(child)"
+                  class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 text-sm font-bold shadow-sm transition-colors"
+                  title="Ajukan Izin Keluar / Pulang"
+                >
+                  <Icon icon="solar:qr-code-bold-duotone" class="w-4 h-4" />
+                  <span>Ajukan Izin</span>
+                </button>
                 <button
                   @click="openAcademicReport(child)"
                   class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-medium transition-colors"
@@ -161,7 +169,7 @@
                 class="w-6 h-6 text-primary-600 mx-auto"
               />
             </div>
-            <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div v-else class="grid grid-cols-2 md:grid-cols-5 gap-3">
               <!-- Academic -->
               <StatCard
                 icon="solar:diploma-line-duotone"
@@ -214,6 +222,23 @@
                 class="cursor-pointer hover:border-purple-300 transition-colors"
                 @click="showDetail(child.id, 'tahfidz')"
               />
+
+              <!-- Perizinan -->
+              <StatCard
+                icon="solar:qr-code-line-duotone"
+                color="indigo"
+                label="Perizinan"
+                :value="childSummaries[child.id]?.leaves?.totalCount || 0"
+                :caption="
+                  childSummaries[child.id]?.leaves?.pendingCount
+                    ? `${childSummaries[child.id].leaves.pendingCount} menunggu ACC`
+                    : childSummaries[child.id]?.leaves?.activeCount
+                    ? `${childSummaries[child.id].leaves.activeCount} izin aktif`
+                    : 'Riwayat & Surat QR'
+                "
+                class="cursor-pointer hover:border-indigo-300 transition-colors col-span-2 md:col-span-1"
+                @click="showDetail(child.id, 'leaves')"
+              />
             </div>
           </div>
 
@@ -224,7 +249,7 @@
               <button
                 v-for="tab in tabs"
                 :key="tab.id"
-                @click="childTabs[child.id] = tab.id"
+                @click="selectTab(child.id, tab.id)"
                 :class="[
                   'flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors',
                   childTabs[child.id] === tab.id
@@ -583,12 +608,12 @@
                             deposit.type === "ziyadah"
                               ? "Taqdim"
                               : deposit.type === "tidak_setor"
-                                ? "Tidak Setor"
-                                : deposit.type === "sabqi"
-                                  ? `Sabqi (${deposit.isCompleted ? "Sudah" : "Belum"})`
-                                  : deposit.type === "manzil"
-                                    ? `Manzil (${deposit.isCompleted ? "Sudah" : "Belum"})`
-                                    : deposit.type
+                              ? "Tidak Setor"
+                              : deposit.type === "sabqi"
+                              ? `Sabqi (${deposit.isCompleted ? "Sudah" : "Belum"})`
+                              : deposit.type === "manzil"
+                              ? `Manzil (${deposit.isCompleted ? "Sudah" : "Belum"})`
+                              : deposit.type
                           }}</span>
                           <span class="text-sm text-slate-500">{{
                             formatDateTime(deposit.depositDate)
@@ -607,11 +632,431 @@
                   </div>
                 </div>
               </div>
+
+              <!-- PERIZINAN / LEAVES TAB -->
+              <div
+                v-else-if="childTabs[child.id] === 'leaves'"
+                class="space-y-4"
+              >
+                <div
+                  class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-amber-50/70 border border-amber-200/70 rounded-xl p-4"
+                >
+                  <div>
+                    <h4 class="font-semibold text-slate-800 text-sm">
+                      Pengajuan Izin Keluar & Pulang Santri
+                    </h4>
+                    <p class="text-xs text-slate-600 mt-0.5">
+                      Ajukan izin dari rumah. Setelah disetujui Kesantrian, Surat Izin Resmi
+                      ber-QR Code akan diterbitkan untuk di-scan saat keluar & kembali ke pondok.
+                    </p>
+                  </div>
+                  <button
+                    @click="openLeaveModal(child)"
+                    class="px-4 py-2.5 rounded-xl bg-[#602515] hover:bg-[#7b311d] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition flex-shrink-0"
+                  >
+                    <Icon icon="solar:add-square-bold-duotone" class="w-4 h-4" />
+                    Ajukan Izin Baru
+                  </button>
+                </div>
+
+                <!-- Empty state -->
+                <div
+                  v-if="!childDetails[child.id]?.leaves?.leaves?.length"
+                  class="text-center py-10 text-slate-500 border border-dashed rounded-xl"
+                >
+                  <Icon
+                    icon="solar:qr-code-line-duotone"
+                    class="w-10 h-10 text-slate-300 mx-auto mb-2"
+                  />
+                  <p class="text-sm font-medium">
+                    Belum ada riwayat pengajuan izin untuk {{ child.fullName }}
+                  </p>
+                </div>
+
+                <!-- Leave Cards -->
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="leave in childDetails[child.id].leaves.leaves"
+                    :key="leave.id"
+                    class="border rounded-xl p-4 bg-white shadow-xs hover:border-slate-300 transition"
+                  >
+                    <div
+                      class="flex flex-wrap items-start justify-between gap-2 pb-3 border-b border-slate-100"
+                    >
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span
+                          class="px-2.5 py-1 rounded-full text-xs font-bold uppercase"
+                          :class="getLeaveStatusBadge(leave).class"
+                        >
+                          {{ getLeaveStatusBadge(leave).label }}
+                        </span>
+                        <span
+                          class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold"
+                        >
+                          {{ getCategoryLabel(leave) }}
+                        </span>
+                        <span
+                          v-if="leave.leaveNumber"
+                          class="text-xs font-mono text-slate-500"
+                        >
+                          No: {{ leave.leaveNumber }}
+                        </span>
+                      </div>
+
+                      <div class="flex items-center gap-2">
+                        <!--Lihat / Cetak Surat QR jika sudah disetujui / keluar / kembali-->
+                        <button
+                          v-if="leave.status !== 'pending' && leave.status !== 'rejected'"
+                          @click="openLetterPreview(leave)"
+                          class="px-3 py-1.5 rounded-lg bg-[#602515]/10 hover:bg-[#602515] text-[#602515] hover:text-white text-xs font-bold flex items-center gap-1.5 transition"
+                        >
+                          <Icon icon="solar:qr-code-bold" class="w-4 h-4" />
+                          Surat Izin & QR Code
+                        </button>
+
+                        <!--Batalkan jika masih pending-->
+                        <button
+                          v-if="leave.status === 'pending'"
+                          @click="cancelLeaveRequest(child.id, leave)"
+                          class="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold flex items-center gap-1 transition"
+                        >
+                          <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
+                          Batalkan
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 py-3 text-xs">
+                      <div>
+                        <span class="text-slate-400 block mb-0.5">Jadwal Izin:</span>
+                        <p class="font-semibold text-slate-800">
+                          {{ formatDate(leave.startDate) }} ({{ leave.startTime || "08:00" }})
+                        </p>
+                        <p class="text-slate-600">
+                          s/d
+                          <strong class="text-red-700">
+                            {{ formatDate(leave.endDate) }} ({{ leave.endTime || "17:00" }} WIB)
+                          </strong>
+                        </p>
+                      </div>
+
+                      <div>
+                        <span class="text-slate-400 block mb-0.5">Alasan & Tujuan:</span>
+                        <p class="font-medium text-slate-800">{{ leave.reason }}</p>
+                        <p v-if="leave.destination" class="text-slate-500">
+                          Tujuan: {{ leave.destination }}
+                        </p>
+                      </div>
+
+                      <div>
+                        <span class="text-slate-400 block mb-0.5">Penjemput:</span>
+                        <p class="font-medium text-slate-800">
+                          {{ leave.pickupName || "-" }}
+                          <span v-if="leave.pickupRelation" class="text-slate-500">
+                            ({{ leave.pickupRelation }})
+                          </span>
+                        </p>
+                        <p v-if="leave.pickupPhone" class="text-slate-500">
+                          HP: {{ leave.pickupPhone }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <!-- Info Scan / Penolakan / Keterlambatan -->
+                    <div
+                      v-if="leave.status === 'rejected' && leave.rejectionReason"
+                      class="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-100 text-xs text-red-700"
+                    >
+                      <strong>Alasan Ditolak:</strong> {{ leave.rejectionReason }}
+                    </div>
+
+                    <div
+                      v-if="leave.checkedOutAt || leave.checkedInAt || leave.isOverdue"
+                      class="mt-2 pt-2.5 border-t border-dashed border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <div class="flex flex-wrap gap-4 text-slate-600">
+                        <span v-if="leave.checkedOutAt">
+                          <strong>Scan Keluar:</strong>
+                          {{ formatDateTime(leave.checkedOutAt) }}
+                        </span>
+                        <span v-if="leave.checkedInAt">
+                          <strong>Scan Kembali:</strong>
+                          {{ formatDateTime(leave.checkedInAt) }}
+                        </span>
+                      </div>
+
+                      <div v-if="leave.isOverdue" class="text-red-600 font-bold flex items-center gap-1">
+                        <Icon icon="solar:danger-triangle-bold" class="w-4 h-4" />
+                        Melebihi Batas Waktu ({{ leave.overdueDurationText }})
+                      </div>
+                      <div
+                        v-else-if="leave.status === 'returned_late'"
+                        class="text-red-600 font-semibold"
+                      >
+                        Kembali Terlambat ({{ leave.overdueDurationText }})
+                        <span v-if="leave.punishment">
+                          • Poin Kedisiplinan: {{ leave.punishment.points }}
+                        </span>
+                        <span v-else-if="leave.lateHandling === 'excused'">
+                          • Dimaafkan (Uzur)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- MODAL PENGAJUAN IZIN OLEH ORANG TUA -->
+    <div
+      v-if="leaveModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 overflow-y-auto"
+      @click.self="leaveModal.show = false"
+    >
+      <div
+        class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100"
+      >
+        <div
+          class="px-5 py-4 bg-gradient-to-r from-[#602515] to-[#8c3d2a] text-white flex items-center justify-between"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+              <Icon icon="solar:qr-code-bold-duotone" class="w-6 h-6" />
+            </div>
+            <div>
+              <h3 class="font-bold text-base">Form Pengajuan Perizinan Santri</h3>
+              <p class="text-xs text-white/80">
+                Santri: <strong>{{ leaveModal.child?.fullName }}</strong> (NIS:
+                {{ leaveModal.child?.nis }})
+              </p>
+            </div>
+          </div>
+          <button
+            @click="leaveModal.show = false"
+            class="p-1.5 rounded-lg hover:bg-white/15 text-white transition"
+          >
+            <Icon icon="solar:close-circle-bold" class="w-6 h-6" />
+          </button>
+        </div>
+
+        <form
+          @submit.prevent="submitParentLeave"
+          class="p-5 overflow-y-auto space-y-4 text-sm"
+        >
+          <!-- Kategori Izin -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
+              Kategori Perizinan
+            </label>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                v-for="cat in leaveCategories"
+                :key="cat.value"
+                type="button"
+                @click="leaveForm.leaveCategory = cat.value"
+                :class="
+                  leaveForm.leaveCategory === cat.value
+                    ? 'bg-[#602515] text-white border-[#602515] shadow-md'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                "
+                class="p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition"
+              >
+                <Icon :icon="cat.icon" class="w-5 h-5" />
+                <span>{{ cat.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Jadwal Keluar & Batas Kembali -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200/70">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                Tanggal & Jam Rencana Keluar/Jemput *
+              </label>
+              <div class="flex gap-2">
+                <input
+                  type="date"
+                  v-model="leaveForm.startDate"
+                  required
+                  class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium bg-white"
+                />
+                <input
+                  type="time"
+                  v-model="leaveForm.startTime"
+                  required
+                  class="w-28 px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-red-700 mb-1">
+                Tanggal & Jam Rencana Kembali ke Pondok *
+              </label>
+              <div class="flex gap-2">
+                <input
+                  type="date"
+                  v-model="leaveForm.endDate"
+                  :min="leaveForm.startDate"
+                  required
+                  class="flex-1 px-3 py-2 border border-red-200 rounded-lg text-xs font-medium bg-white"
+                />
+                <input
+                  type="time"
+                  v-model="leaveForm.endTime"
+                  required
+                  class="w-28 px-2.5 py-2 border border-red-200 rounded-lg text-xs font-medium bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Tujuan & Alasan -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Alamat / Kota Tujuan Pulang/Keluar *
+            </label>
+            <input
+              type="text"
+              v-model="leaveForm.destination"
+              required
+              placeholder="Contoh: Rumah Orang Tua (Bekasi) / RSUD Purwakarta"
+              class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-[#602515]/20 outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Alasan / Keperluan Lengkap *
+            </label>
+            <textarea
+              v-model="leaveForm.reason"
+              rows="3"
+              required
+              placeholder="Jelaskan keperluan izin keluar/pulang secara jelas..."
+              class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-[#602515]/20 outline-none"
+            ></textarea>
+          </div>
+
+          <!-- Data Penjemput -->
+          <div class="border-t pt-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+              Identitas Penjemput / Penanggung Jawab
+            </h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Nama Penjemput *
+                </label>
+                <input
+                  type="text"
+                  v-model="leaveForm.pickupName"
+                  required
+                  placeholder="Nama lengkap penjemput"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Hubungan dgn Santri *
+                </label>
+                <select
+                  v-model="leaveForm.pickupRelation"
+                  required
+                  class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
+                >
+                  <option value="Ayah Kandung">Ayah Kandung</option>
+                  <option value="Ibu Kandung">Ibu Kandung</option>
+                  <option value="Orang Tua (Ayah & Ibu)">Orang Tua (Ayah & Ibu)</option>
+                  <option value="Kakak / Saudara Kandung">Kakak / Saudara Kandung</option>
+                  <option value="Wali Resmi">Wali Resmi</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  No. HP / WhatsApp Aktif *
+                </label>
+                <input
+                  type="text"
+                  v-model="leaveForm.pickupPhone"
+                  required
+                  placeholder="Contoh: 0812xxxxxxxx"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Lampiran Bukti Opsional -->
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">
+              Lampiran Surat / Bukti Pendukung (Opsional)
+            </label>
+            <div class="flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                @change="onParentFileChange"
+                class="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+              />
+              <span v-if="uploadingAttachment" class="text-xs text-amber-600 font-medium">
+                Mengunggah...
+              </span>
+              <span
+                v-else-if="leaveForm.attachment"
+                class="text-xs text-emerald-600 font-semibold"
+              >
+                ✓ Lampiran siap
+              </span>
+            </div>
+          </div>
+
+          <div
+            class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed"
+          >
+            <strong>Perhatian:</strong> Setelah disetujui Bagian Kesantrian, surat izin ber-QR Code
+            akan diterbitkan. QR Code wajib di-scan oleh Bagian Kesantrian saat santri
+            <strong>keluar pondok</strong> dan di-scan kembali saat santri
+            <strong>tiba di pondok</strong>. Keterlambatan kembali melebihi batas waktu akan
+            dikenakan poin pelanggaran kedisiplinan.
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button
+              type="button"
+              @click="leaveModal.show = false"
+              class="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              :disabled="submittingLeave || uploadingAttachment"
+              class="px-5 py-2.5 rounded-xl bg-[#602515] hover:bg-[#7a311d] text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-[#602515]/20 disabled:opacity-50"
+            >
+              <Icon
+                v-if="submittingLeave"
+                icon="svg-spinners:ring-resize"
+                class="w-4 h-4"
+              />
+              <Icon v-else icon="solar:plain-bold" class="w-4 h-4" />
+              {{ submittingLeave ? "Mengirim..." : "Kirim Pengajuan Izin" }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL SURAT IZIN JALAN A4 & QR CODE -->
+    <StudentLeaveLetterModal
+      :isOpen="letterPreview.show"
+      :leave="letterPreview.leave"
+      @close="letterPreview.show = false"
+    />
   </div>
 </template>
 
@@ -619,8 +1064,10 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
+import Swal from "sweetalert2";
 import StatCard from "@/components/ui/StatCard.vue";
-import { authApi, parentDashboardApi } from "@/services/api.js";
+import StudentLeaveLetterModal from "@/components/leaves/StudentLeaveLetterModal.vue";
+import { authApi, parentDashboardApi, studentLeavesApi } from "@/services/api.js";
 
 const router = useRouter();
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -644,7 +1091,48 @@ const tabs = [
   },
   { id: "clinic", label: "Kesehatan", icon: "solar:health-line-duotone" },
   { id: "tahfidz", label: "Tahfidz", icon: "solar:book-bookmark-line-duotone" },
+  {
+    id: "leaves",
+    label: "Perizinan (Izin Pulang)",
+    icon: "solar:qr-code-line-duotone",
+  },
 ];
+
+const leaveCategories = [
+  { value: "pulang", label: "Izin Pulang", icon: "solar:home-smile-bold-duotone" },
+  { value: "keluar", label: "Izin Keluar", icon: "solar:walking-round-bold-duotone" },
+  { value: "sakit", label: "Izin Sakit", icon: "solar:health-bold-duotone" },
+  { value: "kegiatan", label: "Dispensasi", icon: "solar:diploma-verified-bold-duotone" },
+];
+
+const todayStr = new Date().toISOString().split("T")[0];
+
+const leaveModal = reactive({
+  show: false,
+  child: null,
+});
+
+const leaveForm = reactive({
+  leaveCategory: "pulang",
+  startDate: todayStr,
+  endDate: todayStr,
+  startTime: "08:00",
+  endTime: "17:00",
+  destination: "",
+  reason: "",
+  pickupName: "",
+  pickupRelation: "Ayah Kandung",
+  pickupPhone: "",
+  attachment: "",
+});
+
+const submittingLeave = ref(false);
+const uploadingAttachment = ref(false);
+
+const letterPreview = reactive({
+  show: false,
+  leave: null,
+});
 
 // Methods
 function getPhotoUrl(photo) {
@@ -682,6 +1170,60 @@ function getGradeColor(grade) {
   if (grade.startsWith("C")) return "bg-yellow-100 text-yellow-700";
   if (grade.startsWith("D")) return "bg-orange-100 text-orange-700";
   return "bg-red-100 text-red-700";
+}
+
+function getCategoryLabel(leave) {
+  const cat = leave?.leaveCategory;
+  if (cat === "keluar") return "Izin Keluar Komplek";
+  if (cat === "sakit" || leave?.type === "sick") return "Izin Sakit";
+  if (cat === "kegiatan") return "Izin Kegiatan";
+  return "Izin Pulang";
+}
+
+function getLeaveStatusBadge(leave) {
+  if (leave.isOverdue) {
+    return {
+      label: "Melebihi Batas Waktu (Belum Kembali)",
+      class: "bg-red-100 text-red-700 border border-red-200",
+    };
+  }
+  switch (leave.status) {
+    case "pending":
+      return {
+        label: "Menunggu Persetujuan Kesantrian",
+        class: "bg-amber-100 text-amber-800",
+      };
+    case "approved":
+      return {
+        label: "Disetujui (Surat QR Siap)",
+        class: "bg-blue-100 text-blue-700",
+      };
+    case "checked_out":
+      return {
+        label: "Sedang di Luar Pondok",
+        class: "bg-indigo-100 text-indigo-700",
+      };
+    case "returned":
+      return {
+        label: "Sudah Kembali (Tepat Waktu)",
+        class: "bg-emerald-100 text-emerald-700",
+      };
+    case "returned_late":
+      return {
+        label: "Sudah Kembali (Terlambat)",
+        class: "bg-rose-100 text-rose-700",
+      };
+    case "rejected":
+      return {
+        label: "Ditolak Kesantrian",
+        class: "bg-red-100 text-red-700",
+      };
+    default:
+      return {
+        label: leave.status || "Disetujui",
+        class: "bg-slate-100 text-slate-700",
+      };
+  }
 }
 
 async function loadData() {
@@ -726,9 +1268,13 @@ async function toggleChildExpand(childId) {
     expandedChildren.value.splice(idx, 1);
   } else {
     expandedChildren.value.push(childId);
-    // Load detail data when expanding
     loadChildDetail(childId, childTabs[childId] || "academic");
   }
+}
+
+function selectTab(childId, tabId) {
+  childTabs[childId] = tabId;
+  loadChildDetail(childId, tabId);
 }
 
 async function showDetail(childId, tab) {
@@ -739,9 +1285,8 @@ async function showDetail(childId, tab) {
   loadChildDetail(childId, tab);
 }
 
-async function loadChildDetail(childId, tab) {
-  // Check if already loaded
-  if (childDetails[childId]?.[tab]) return;
+async function loadChildDetail(childId, tab, forceReload = false) {
+  if (!forceReload && childDetails[childId]?.[tab]) return;
 
   loadingDetail[childId] = true;
 
@@ -760,6 +1305,9 @@ async function loadChildDetail(childId, tab) {
       case "tahfidz":
         res = await parentDashboardApi.getChildTahfidz(childId);
         break;
+      case "leaves":
+        res = await parentDashboardApi.getChildLeaves(childId);
+        break;
     }
 
     if (res?.success) {
@@ -775,8 +1323,116 @@ async function loadChildDetail(childId, tab) {
   }
 }
 
+async function openLeaveModal(child) {
+  leaveModal.child = child;
+  leaveForm.leaveCategory = "pulang";
+  leaveForm.startDate = todayStr;
+  leaveForm.endDate = todayStr;
+  leaveForm.startTime = "08:00";
+  leaveForm.endTime = "17:00";
+  leaveForm.destination = "";
+  leaveForm.reason = "";
+  leaveForm.attachment = "";
+
+  // Ensure leaves data loaded to prefill parent profile if available
+  if (!childDetails[child.id]?.leaves) {
+    await loadChildDetail(child.id, "leaves", true);
+  }
+  const profile = childDetails[child.id]?.leaves?.parentProfile;
+  if (profile) {
+    leaveForm.pickupName = profile.fatherName || profile.motherName || "";
+    leaveForm.pickupPhone = profile.phone || "";
+    if (!leaveForm.destination && profile.address) {
+      leaveForm.destination = profile.address;
+    }
+  }
+
+  leaveModal.show = true;
+}
+
+async function onParentFileChange(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  uploadingAttachment.value = true;
+  try {
+    const res = await studentLeavesApi.uploadFile(file);
+    leaveForm.attachment = res.data?.url || res.url || "";
+  } catch (err) {
+    Swal.fire("Gagal Upload", err.message || "Gagal mengunggah lampiran", "error");
+  } finally {
+    uploadingAttachment.value = false;
+  }
+}
+
+async function submitParentLeave() {
+  if (!leaveModal.child) return;
+  submittingLeave.value = true;
+  try {
+    const childId = leaveModal.child.id;
+    const payload = {
+      type: leaveForm.leaveCategory === "sakit" ? "sick" : "permit",
+      leaveCategory: leaveForm.leaveCategory,
+      startDate: leaveForm.startDate,
+      endDate: leaveForm.endDate,
+      startTime: leaveForm.startTime,
+      endTime: leaveForm.endTime,
+      destination: leaveForm.destination,
+      reason: leaveForm.reason,
+      pickupName: leaveForm.pickupName,
+      pickupRelation: leaveForm.pickupRelation,
+      pickupPhone: leaveForm.pickupPhone,
+      attachment: leaveForm.attachment || undefined,
+    };
+
+    const res = await parentDashboardApi.submitChildLeave(childId, payload);
+    if (res.success) {
+      leaveModal.show = false;
+      await loadChildSummary(childId);
+      await showDetail(childId, "leaves");
+      await loadChildDetail(childId, "leaves", true);
+      Swal.fire(
+        "Pengajuan Terkirim!",
+        res.message || "Pengajuan izin berhasil dikirim ke Bagian Kesantrian.",
+        "success"
+      );
+    }
+  } catch (err) {
+    Swal.fire("Gagal", err.message || "Gagal mengirim pengajuan izin", "error");
+  } finally {
+    submittingLeave.value = false;
+  }
+}
+
+async function cancelLeaveRequest(childId, leave) {
+  const result = await Swal.fire({
+    title: "Batalkan Pengajuan Izin?",
+    text: "Pengajuan izin yang masih menunggu persetujuan ini akan dihapus.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#dc2626",
+    confirmButtonText: "Ya, Batalkan",
+    cancelButtonText: "Tidak",
+  });
+  if (!result.isConfirmed) return;
+
+  try {
+    const res = await parentDashboardApi.cancelChildLeave(childId, leave.id);
+    if (res.success) {
+      await loadChildSummary(childId);
+      await loadChildDetail(childId, "leaves", true);
+      Swal.fire("Dibatalkan", res.message, "success");
+    }
+  } catch (err) {
+    Swal.fire("Gagal", err.message || "Gagal membatalkan izin", "error");
+  }
+}
+
+function openLetterPreview(leave) {
+  letterPreview.leave = leave;
+  letterPreview.show = true;
+}
+
 function openAcademicReport(child) {
-  // Navigate to academic report card with student pre-selected
   router.push({
     path: "/parent-dashboard/report-card",
     query: { studentId: child.id, studentName: child.fullName },
@@ -784,7 +1440,6 @@ function openAcademicReport(child) {
 }
 
 function openTahfidzReport(child) {
-  // Navigate to tahfidz report with student pre-selected
   router.push({
     path: "/parent-dashboard/tahfidz-report",
     query: { studentId: child.id, studentName: child.fullName },

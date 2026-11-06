@@ -169,6 +169,13 @@
       "when": 1793632200000,
       "tag": "0023_add_structural_role_hierarchy",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1793900000000,
+      "tag": "0024_add_student_leaves_qr_workflow",
+      "breakpoints": true
     }
   ]
 }
