@@ -176,6 +176,13 @@
       "when": 1793900000000,
       "tag": "0024_add_student_leaves_qr_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1793972599090,
+      "tag": "0025_add_sp_attachment",
+      "breakpoints": true
     }
   ]
 }
