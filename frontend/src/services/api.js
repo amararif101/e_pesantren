@@ -2261,6 +2261,23 @@ export const parentDashboardApi = {
   async getChildTahfidz(studentId) {
     return request(`/api/parent-dashboard/child/${studentId}/tahfidz`);
   },
+
+  async getChildLeaves(studentId) {
+    return request(`/api/parent-dashboard/child/${studentId}/leaves`);
+  },
+
+  async submitChildLeave(studentId, data) {
+    return request(`/api/parent-dashboard/child/${studentId}/leaves`, {
+      method: "POST",
+      body: data,
+    });
+  },
+
+  async cancelChildLeave(studentId, leaveId) {
+    return request(`/api/parent-dashboard/child/${studentId}/leaves/${leaveId}`, {
+      method: "DELETE",
+    });
+  },
 };
 
 // ============================================
@@ -2339,6 +2356,45 @@ export const studentLeavesApi = {
   },
   async deleteLeave(id) {
     return request(`/api/student-leaves/${id}`, { method: "DELETE" });
+  },
+  async getPointRules() {
+    return request("/api/student-leaves/point-rules");
+  },
+  async scanQrToken(qrToken) {
+    return request(`/api/student-leaves/scan/${encodeURIComponent(qrToken)}`);
+  },
+  async approveLeave(id, data = {}) {
+    return request(`/api/student-leaves/${id}/approve`, {
+      method: "POST",
+      body: data,
+    });
+  },
+  async rejectLeave(id, rejectionReason) {
+    return request(`/api/student-leaves/${id}/reject`, {
+      method: "POST",
+      body: { rejectionReason },
+    });
+  },
+  async checkoutLeave(id, data = {}) {
+    return request(`/api/student-leaves/${id}/checkout`, {
+      method: "POST",
+      body: data,
+    });
+  },
+  async checkinLeave(id, data = {}) {
+    return request(`/api/student-leaves/${id}/checkin`, {
+      method: "POST",
+      body: data,
+    });
+  },
+  async getHeaderLogo() {
+    return request("/api/student-leaves/header-logo");
+  },
+  async updateHeaderLogo(logo) {
+    return request("/api/student-leaves/header-logo", {
+      method: "PUT",
+      body: { logo },
+    });
   },
 };
 

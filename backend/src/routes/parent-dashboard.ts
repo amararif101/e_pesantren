@@ -1,7 +1,9 @@
 import { Hono } from "hono";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 
 // Schema imports
 import { parents, students } from "../db/schema/students";
@@ -16,7 +18,6 @@ import {
 import {
   rewardsPunishments,
   studentWarnings,
-  pointRules,
 } from "../db/schema/rewards-punishments";
 import { healthExaminations, clinicPatients } from "../db/schema/clinic";
 import {
@@ -25,11 +26,22 @@ import {
   tahfidzReportCards,
 } from "../db/schema/tahfidz";
 import { teachers } from "../db/schema/teachers";
+import { studentLeaves, studentLeaveItems } from "../db/schema/student-leaves";
+import {
+  ensureStudentLeavesSchema,
+  generateQrToken,
+  generateLeaveNumber,
+  enrichLeaveRecords,
+} from "./student-leaves";
 
 const parentDashboard = new Hono();
 
 // All routes require authentication
 parentDashboard.use("*", authMiddleware);
+parentDashboard.use("*", async (c, next) => {
+  await ensureStudentLeavesSchema();
+  await next();
+});
 
 // Helper: Get parent ID from logged-in user
 async function getParentIdFromUser(userId: number): Promise<number | null> {
@@ -211,10 +223,7 @@ parentDashboard.get("/child/:studentId/summary", async (c) => {
         )
       );
 
-    // Get clinic visits count (last 6 months)
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
+    // Get clinic visits count
     const clinicVisits = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(healthExaminations)
@@ -246,6 +255,21 @@ parentDashboard.get("/child/:studentId/summary", async (c) => {
       .orderBy(desc(tahfidzExams.examDate))
       .limit(1);
 
+    // Get leaves summary
+    const leaveItems = await db
+      .select({
+        leaveId: studentLeaveItems.leaveId,
+        status: studentLeaves.status,
+      })
+      .from(studentLeaveItems)
+      .innerJoin(studentLeaves, eq(studentLeaveItems.leaveId, studentLeaves.id))
+      .where(eq(studentLeaveItems.studentId, studentId));
+
+    const pendingLeavesCount = leaveItems.filter((l) => l.status === "pending").length;
+    const activeLeavesCount = leaveItems.filter(
+      (l) => l.status === "approved" || l.status === "checked_out"
+    ).length;
+
     return c.json({
       success: true,
       data: {
@@ -266,6 +290,11 @@ parentDashboard.get("/child/:studentId/summary", async (c) => {
           totalDeposits: tahfidzStats[0]?.totalDeposits || 0,
           totalPages: Number(tahfidzStats[0]?.totalPages || 0),
           latestExam: latestExam[0] || null,
+        },
+        leaves: {
+          totalCount: leaveItems.length,
+          pendingCount: pendingLeavesCount,
+          activeCount: activeLeavesCount,
         },
       },
     });
@@ -556,6 +585,215 @@ parentDashboard.get("/child/:studentId/tahfidz", async (c) => {
       { success: false, message: "Failed to fetch tahfidz data" },
       500
     );
+  }
+});
+
+// ============ GET CHILD LEAVES (PERIZINAN SANTRI) ============
+parentDashboard.get("/child/:studentId/leaves", async (c) => {
+  try {
+    const user = c.get("user");
+    const studentId = parseInt(c.req.param("studentId"));
+
+    if (user.role !== "parent") {
+      return c.json(
+        { success: false, message: "Only parents can access this" },
+        403
+      );
+    }
+
+    const parentId = await getParentIdFromUser(user.userId);
+    if (!parentId || !(await isStudentOfParent(studentId, parentId))) {
+      return c.json({ success: false, message: "Access denied" }, 403);
+    }
+
+    const parentProfile = await db.query.parents.findFirst({
+      where: eq(parents.id, parentId),
+    });
+
+    const itemRows = await db.query.studentLeaveItems.findMany({
+      where: eq(studentLeaveItems.studentId, studentId),
+    });
+
+    const leaveIds = itemRows.map((i) => i.leaveId).filter(Boolean) as number[];
+    let leavesList: any[] = [];
+
+    if (leaveIds.length > 0) {
+      const rawLeaves = await db.query.studentLeaves.findMany({
+        where: inArray(studentLeaves.id, leaveIds),
+        with: {
+          items: {
+            with: {
+              student: true,
+              clinicExam: true,
+            },
+          },
+        },
+        orderBy: [desc(studentLeaves.createdAt)],
+      });
+      leavesList = await enrichLeaveRecords(rawLeaves);
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        parentProfile: parentProfile
+          ? {
+              fatherName: parentProfile.fatherName,
+              motherName: parentProfile.motherName,
+              phone: parentProfile.phone,
+              address: parentProfile.address,
+            }
+          : null,
+        leaves: leavesList,
+      },
+    });
+  } catch (error: any) {
+    console.error("Get child leaves error:", error);
+    return c.json(
+      { success: false, message: "Gagal memuat data perizinan: " + error.message },
+      500
+    );
+  }
+});
+
+// ============ POST CHILD LEAVE REQUEST (PENGAJUAN IZIN OLEH ORANG TUA) ============
+parentDashboard.post(
+  "/child/:studentId/leaves",
+  zValidator(
+    "json",
+    z.object({
+      type: z.enum(["sick", "permit"]).default("permit"),
+      leaveCategory: z.string().default("pulang"),
+      startDate: z.string().min(1),
+      endDate: z.string().min(1),
+      startTime: z.string().optional(),
+      endTime: z.string().optional(),
+      reason: z.string().min(3, "Alasan izin wajib diisi dengan jelas"),
+      destination: z.string().optional(),
+      pickupName: z.string().min(2, "Nama penjemput wajib diisi"),
+      pickupRelation: z.string().min(1, "Hubungan penjemput wajib diisi"),
+      pickupPhone: z.string().min(5, "Nomor HP penjemput wajib diisi"),
+      attachment: z.string().optional(),
+    })
+  ),
+  async (c) => {
+    try {
+      const user = c.get("user");
+      const studentId = parseInt(c.req.param("studentId"));
+      const body = c.req.valid("json");
+
+      if (user.role !== "parent") {
+        return c.json(
+          { success: false, message: "Hanya akun orang tua yang dapat mengajukan lewat jalur ini" },
+          403
+        );
+      }
+
+      const parentId = await getParentIdFromUser(user.userId);
+      if (!parentId || !(await isStudentOfParent(studentId, parentId))) {
+        return c.json({ success: false, message: "Akses ditolak" }, 403);
+      }
+
+      let createdLeaveId = 0;
+
+      await db.transaction(async (tx) => {
+        const now = new Date();
+        const [leaveRes] = await tx.insert(studentLeaves).values({
+          type: body.leaveCategory === "sakit" ? "sick" : body.type,
+          leaveCategory: body.leaveCategory || "pulang",
+          startDate: new Date(body.startDate),
+          endDate: new Date(body.endDate),
+          startTime: body.startTime || "08:00",
+          endTime: body.endTime || "17:00",
+          reason: body.reason,
+          destination: body.destination || null,
+          pickupName: body.pickupName,
+          pickupRelation: body.pickupRelation,
+          pickupPhone: body.pickupPhone,
+          attachment: body.attachment || null,
+          requestedByRole: "parent",
+          status: "pending",
+          createdBy: user.userId,
+        });
+
+        const leaveId = Number(leaveRes.insertId);
+        createdLeaveId = leaveId;
+
+        const qrToken = generateQrToken(leaveId, now);
+        const leaveNumber = generateLeaveNumber(leaveId, now);
+
+        await tx
+          .update(studentLeaves)
+          .set({ qrToken, leaveNumber })
+          .where(eq(studentLeaves.id, leaveId));
+
+        await tx.insert(studentLeaveItems).values({
+          leaveId,
+          studentId,
+          clinicExamId: null,
+        });
+      });
+
+      return c.json({
+        success: true,
+        message:
+          "Pengajuan izin berhasil dikirim! Menunggu verifikasi dan persetujuan Bagian Kesantrian.",
+        data: { id: createdLeaveId },
+      });
+    } catch (error: any) {
+      console.error("Create parent leave request error:", error);
+      return c.json(
+        { success: false, message: "Gagal mengirim pengajuan izin: " + error.message },
+        500
+      );
+    }
+  }
+);
+
+// ============ DELETE PENDING LEAVE REQUEST BY PARENT ============
+parentDashboard.delete("/child/:studentId/leaves/:leaveId", async (c) => {
+  try {
+    const user = c.get("user");
+    const studentId = parseInt(c.req.param("studentId"));
+    const leaveId = parseInt(c.req.param("leaveId"));
+
+    if (user.role !== "parent") {
+      return c.json({ success: false, message: "Only parents can access this" }, 403);
+    }
+
+    const parentId = await getParentIdFromUser(user.userId);
+    if (!parentId || !(await isStudentOfParent(studentId, parentId))) {
+      return c.json({ success: false, message: "Access denied" }, 403);
+    }
+
+    const leave = await db.query.studentLeaves.findFirst({
+      where: eq(studentLeaves.id, leaveId),
+      with: { items: true },
+    });
+
+    if (!leave || !leave.items.some((i) => i.studentId === studentId)) {
+      return c.json({ success: false, message: "Data pengajuan tidak ditemukan" }, 404);
+    }
+
+    if (leave.status !== "pending") {
+      return c.json(
+        {
+          success: false,
+          message: "Hanya pengajuan yang masih berstatus Menunggu Persetujuan yang dapat dibatalkan.",
+        },
+        400
+      );
+    }
+
+    await db.delete(studentLeaves).where(eq(studentLeaves.id, leaveId));
+
+    return c.json({
+      success: true,
+      message: "Pengajuan izin berhasil dibatalkan.",
+    });
+  } catch (error: any) {
+    console.error("Cancel parent leave error:", error);
+    return c.json({ success: false, message: "Gagal membatalkan izin" }, 500);
   }
 });
 
