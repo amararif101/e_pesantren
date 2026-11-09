@@ -1865,6 +1865,10 @@ export const tahfidzApi = {
     const query = new URLSearchParams(params).toString();
     return request(`/api/tahfidz/exam-recap?${query}`);
   },
+  async getClassReport(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/class-report?${query}`);
+  },
   // Target Settings
   async getTargets() {
     return request("/api/tahfidz/targets");

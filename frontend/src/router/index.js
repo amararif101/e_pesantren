@@ -566,6 +566,11 @@ const router = createRouter({
           component: () => import("@/views/apps/tahfidz/MadingHalaqah.vue"),
         },
         {
+          path: "apps/tahfidz/mading-kelas",
+          name: "MadingKelas",
+          component: () => import("@/views/apps/tahfidz/MadingKelas.vue"),
+        },
+        {
           path: "apps/tahfidz/mading-sertifikasi",
           name: "MadingSertifikasi",
           component: () =>

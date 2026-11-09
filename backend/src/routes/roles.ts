@@ -126,6 +126,11 @@ const availableRoutes = [
     category: "Tahfidz",
   },
   {
+    path: "/apps/tahfidz/mading-kelas",
+    label: "Mading Kelas",
+    category: "Tahfidz",
+  },
+  {
     path: "/apps/tahfidz/mading-sertifikasi",
     label: "Mading Sertifikasi",
     category: "Tahfidz",

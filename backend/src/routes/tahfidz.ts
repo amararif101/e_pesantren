@@ -2330,6 +2330,192 @@ app.get("/halaqah/:groupId/health-summary", async (c) => {
   }
 });
 
+// --- CLASS HAFALAN REPORT ---
+// GET /class-report - Mading hafalan grouped per kelas (not per halaqah): every
+// active santri with pages memorised in the period vs target, cumulative
+// total pages / juz and the last Taqdim position.
+app.get("/class-report", async (c) => {
+  const classId = c.req.query("classId");
+  const gender = c.req.query("gender");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const startDate =
+    c.req.query("startDate") || `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+  const endDate =
+    c.req.query("endDate") ||
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDay)}`;
+
+  try {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && !allowedIds.length) {
+      return c.json({
+        success: true,
+        data: { period: { startDate, endDate }, summary: null, classes: [] },
+      });
+    }
+
+    const conditions: any[] = [eq(students.status, "active")];
+    if (allowedIds) conditions.push(inArray(students.id, allowedIds));
+    else if (gender) conditions.push(eq(students.gender, gender as "male" | "female"));
+    if (classId) conditions.push(eq(students.classId, Number(classId)));
+
+    const roster = await db
+      .select({
+        id: students.id,
+        nis: students.nis,
+        fullName: students.fullName,
+        classId: students.classId,
+        className: classes.name,
+        halaqahName: halaqahGroups.name,
+        levelTargetPages: tahfidzTargets.targetPages,
+      })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(
+        halaqahMembers,
+        and(
+          eq(halaqahMembers.studentId, students.id),
+          eq(halaqahMembers.status, "active"),
+        ),
+      )
+      .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
+      .leftJoin(tahfidzTargets, eq(halaqahGroups.targetLevelId, tahfidzTargets.id))
+      .where(and(...conditions))
+      .orderBy(asc(classes.name), asc(students.fullName));
+
+    const seen = new Set<number>();
+    const people = roster.filter((s) =>
+      seen.has(s.id) ? false : (seen.add(s.id), true),
+    );
+    const ids = people.map((s) => s.id);
+
+    const defaultTarget = (await db.select().from(tahfidzTargets))[0]?.targetPages || 6;
+    // Legacy deposits only have pageNumber and count as one page
+    const pagesExpr = sql`COALESCE(${tahfidzDeposits.totalPages}, CASE WHEN ${tahfidzDeposits.pageNumber} IS NOT NULL THEN 1 ELSE 0 END)`;
+
+    const sumPages = async (extra: any[] = []) => {
+      const rows = ids.length
+        ? await db
+            .select({
+              studentId: tahfidzDeposits.studentId,
+              pages: sql<string>`sum(${pagesExpr})`,
+            })
+            .from(tahfidzDeposits)
+            .where(
+              and(
+                eq(tahfidzDeposits.type, "ziyadah"),
+                inArray(tahfidzDeposits.studentId, ids),
+                ...extra,
+              ),
+            )
+            .groupBy(tahfidzDeposits.studentId)
+        : [];
+      return new Map(rows.map((r) => [r.studentId, Number(r.pages) || 0]));
+    };
+
+    const periodPages = await sumPages([
+      sql`${tahfidzDeposits.depositDate} >= ${`${startDate} 00:00:00`}`,
+      sql`${tahfidzDeposits.depositDate} <= ${`${endDate} 23:59:59`}`,
+    ]);
+    const totalPages = await sumPages();
+
+    // Last Taqdim per santri (latest date, then latest id)
+    const lastRows = ids.length
+      ? await db
+          .select({
+            studentId: tahfidzDeposits.studentId,
+            endSurah: tahfidzDeposits.endSurah,
+            endAyat: tahfidzDeposits.endAyat,
+            endPage: tahfidzDeposits.endPage,
+            pageNumber: tahfidzDeposits.pageNumber,
+            juz: tahfidzDeposits.juz,
+            depositDate: tahfidzDeposits.depositDate,
+          })
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              eq(tahfidzDeposits.type, "ziyadah"),
+              inArray(tahfidzDeposits.studentId, ids),
+              sql`${tahfidzDeposits.id} = (SELECT d2.id FROM tahfidz_deposits d2 WHERE d2.student_id = ${tahfidzDeposits.studentId} AND d2.type = 'ziyadah' ORDER BY d2.deposit_date DESC, d2.id DESC LIMIT 1)`,
+            ),
+          )
+      : [];
+    const lastByStudent = new Map(lastRows.map((r) => [r.studentId, r]));
+
+    // Target scales with the length of the period (target is per month)
+    const days =
+      (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000 + 1;
+    const months = Math.max(1, Math.round(days / 30));
+
+    const byClass = new Map<string, any>();
+    for (const s of people) {
+      const targetPages = (s.levelTargetPages || defaultTarget) * months;
+      const pages = Math.round((periodPages.get(s.id) || 0) * 100) / 100;
+      const total = Math.round((totalPages.get(s.id) || 0) * 100) / 100;
+      const last = lastByStudent.get(s.id);
+      const lastPage = last ? last.endPage ?? last.pageNumber : null;
+
+      const key = String(s.classId ?? "none");
+      if (!byClass.has(key)) {
+        byClass.set(key, {
+          classId: s.classId,
+          className: s.className || "Tanpa Kelas",
+          students: [],
+        });
+      }
+      byClass.get(key).students.push({
+        studentId: s.id,
+        nis: s.nis,
+        fullName: s.fullName,
+        halaqahName: s.halaqahName || null,
+        periodPages: pages,
+        targetPages,
+        status: pages > targetPages ? "MT" : pages === targetPages ? "ST" : "DT",
+        totalPages: total,
+        totalJuz: Math.round((total / 20) * 100) / 100, // 1 juz = 20 halaman
+        lastPosition: last
+          ? {
+              surah: last.endSurah,
+              ayat: last.endAyat,
+              page: lastPage,
+              juz: last.juz ?? (lastPage ? getJuzFromPage(lastPage) : null),
+              date: new Date(last.depositDate).toISOString().split("T")[0],
+            }
+          : null,
+      });
+    }
+
+    // Santri without a class go last
+    const classList = [...byClass.values()].sort(
+      (a, b) => Number(a.classId == null) - Number(b.classId == null),
+    );
+    const all = classList.flatMap((k) => k.students);
+    return c.json({
+      success: true,
+      data: {
+        period: { startDate, endDate, months },
+        summary: {
+          totalStudents: all.length,
+          achieved: all.filter((s) => s.status !== "DT").length,
+          below: all.filter((s) => s.status === "DT").length,
+          totalPeriodPages:
+            Math.round(all.reduce((sum, s) => sum + s.periodPages, 0) * 100) / 100,
+        },
+        classes: classList,
+      },
+    });
+  } catch (e: any) {
+    console.error("Class report error:", e);
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 // --- EXAM RECAP ---
 // GET /exam-recap?category=UKJ|UPK|UA - one row per active santri (including
 // those with no exam yet) summarising their exams of that category in the
