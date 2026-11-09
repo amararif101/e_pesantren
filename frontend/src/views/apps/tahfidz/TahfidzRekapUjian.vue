@@ -318,6 +318,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import { useRoute } from "vue-router";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import StatCard from "@/components/ui/StatCard.vue";
@@ -329,7 +330,13 @@ const tabs = [
   { value: "UA", label: "Ujian Akhir" },
 ];
 
-const category = ref("UKJ");
+// ?category=UPK|UA opens that tab (links from the monitoring dashboard)
+const route = useRoute();
+const category = ref(
+  tabs.some((t) => t.value === route.query.category)
+    ? route.query.category
+    : "UKJ",
+);
 const loading = ref(false);
 const rows = ref([]);
 const summary = ref(null);

@@ -455,7 +455,7 @@
                       type="button"
                       @click.stop="showJuzBlockNotice(item)"
                       class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
-                      title="Belum bisa Taqdim - perlu UKJ dulu"
+                      title="Belum bisa Taqdim - klik untuk input UKJ"
                     >
                       ⚠ Perlu UKJ Juz {{ item.juzBlock.completedJuz }}
                     </button>
@@ -483,6 +483,14 @@
                       :class="sabqiManzilPillClass(item, 'manzil')"
                     >
                       {{ pillLabel(item, "manzil") }}
+                    </button>
+                    <button
+                      type="button"
+                      @click.stop="openExamInput(item, 'UPK')"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#602515]/10 text-[#602515]"
+                      title="Input nilai UPK santri ini"
+                    >
+                      UPK
                     </button>
                   </div>
                 </div>
@@ -1098,6 +1106,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import { useRouter } from "vue-router";
 import StatCard from "@/components/ui/StatCard.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";
@@ -1341,11 +1350,18 @@ function pillLabel(item, type) {
   return deposit ? `${label}: ${deposit.isCompleted ? "Sudah" : "Belum"}` : label;
 }
 
+// Open the exam form on the Ujian page already filled for this santri.
+const router = useRouter();
+function openExamInput(item, category, juz) {
+  router.push({
+    path: "/apps/tahfidz/exams",
+    query: { examStudentId: item.student.id, category, juz },
+  });
+}
+
+// Santri blocked from Taqdim: go straight to the UKJ input for that juz.
 function showJuzBlockNotice(item) {
-  statusModalType.value = "failed";
-  statusModalTitle.value = "Perlu Ujian Kenaikan Juz (UKJ)";
-  statusModalMessage.value = `${item.student.name} sudah menyelesaikan Juz ${item.juzBlock.completedJuz}. Santri ini harus mengikuti dan lulus UKJ untuk Juz ${item.juzBlock.completedJuz} sebelum bisa melanjutkan setoran Taqdim.`;
-  showStatusModal.value = true;
+  openExamInput(item, "UKJ", item.juzBlock.completedJuz);
 }
 
 function getStatusText(status) {

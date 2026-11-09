@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import path from "path";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lte, ne } from "drizzle-orm";
 import { db } from "../db";
 import { tahfidzDeposits, tahfidzExams } from "../db/schema";
 
@@ -88,6 +88,59 @@ export async function checkJuzCompletionBlock(
   return takenUKJ
     ? { blocked: false, completedJuz: null }
     : { blocked: true, completedJuz };
+}
+
+function getJuz(sora: number | null | undefined, aya: number | null | undefined) {
+  return sora && aya ? (getAyatInfo(sora, aya)?.jozz ?? null) : null;
+}
+
+// The exact-end block above only fires when a Taqdim stops precisely on the
+// last ayat of a juz, so a deposit that runs past the boundary, or a new one
+// started in another juz, slipped through without UKJ. This guard closes
+// both: a Taqdim must stay inside one juz, and may only move to a different
+// juz than the previous Taqdim once that previous juz has a UKJ record.
+// Returns the rejection message, or null when allowed.
+export async function checkJuzTransition(
+  studentId: number,
+  deposit: {
+    startSurah?: number | null;
+    startAyat?: number | null;
+    endSurah?: number | null;
+    endAyat?: number | null;
+    depositDate: Date;
+  },
+  excludeDepositId?: number,
+): Promise<string | null> {
+  const startJuz = getJuz(deposit.startSurah, deposit.startAyat);
+  const endJuz = getJuz(deposit.endSurah, deposit.endAyat);
+  if (!startJuz || !endJuz) return null;
+
+  if (startJuz !== endJuz) {
+    return `Setoran Taqdim tidak boleh melewati batas juz (Juz ${startJuz} ke Juz ${endJuz}). Akhiri setoran di akhir Juz ${startJuz}, lalu ikuti UKJ Juz ${startJuz}.`;
+  }
+
+  const prev = await db.query.tahfidzDeposits.findFirst({
+    where: and(
+      eq(tahfidzDeposits.studentId, studentId),
+      eq(tahfidzDeposits.type, "ziyadah"),
+      lte(tahfidzDeposits.depositDate, deposit.depositDate),
+      excludeDepositId ? ne(tahfidzDeposits.id, excludeDepositId) : undefined,
+    ),
+    orderBy: [desc(tahfidzDeposits.depositDate), desc(tahfidzDeposits.id)],
+  });
+  const prevJuz = getJuz(prev?.endSurah, prev?.endAyat);
+  if (!prevJuz || prevJuz === startJuz) return null;
+
+  const takenUKJ = await db.query.tahfidzExams.findFirst({
+    where: and(
+      eq(tahfidzExams.studentId, studentId),
+      eq(tahfidzExams.examCategory, "UKJ"),
+      eq(tahfidzExams.juz, prevJuz),
+    ),
+  });
+  return takenUKJ
+    ? null
+    : `Santri belum mengikuti UKJ Juz ${prevJuz}. Setoran Taqdim di Juz ${startJuz} baru bisa diinput setelah UKJ Juz ${prevJuz} tercatat.`;
 }
 
 // checkJuzCompletionBlock() is called per-student inside Promise.all() for

@@ -340,7 +340,11 @@
           </div>
 
           <div class="p-6 overflow-y-auto">
-            <form @submit.prevent="submitExam" class="space-y-6">
+            <form
+              @submit.prevent="submitExam"
+              @input="clampNumber"
+              class="space-y-6"
+            >
               <!-- Info Dasar -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="relative">
@@ -555,6 +559,7 @@
                   >
                   <input
                     type="number"
+                    step="any"
                     v-model="form.directFinalScore"
                     min="0"
                     max="100"
@@ -628,6 +633,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form[`nilai${n}`]"
                       min="0"
                       max="15"
@@ -640,6 +646,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreTajwid"
                       min="0"
                       max="10"
@@ -680,6 +687,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form[`nilai${n}`]"
                       min="0"
                       max="15"
@@ -692,6 +700,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreTajwid"
                       min="0"
                       max="10"
@@ -757,6 +766,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form[`nilai${n}`]"
                       min="0"
                       max="10"
@@ -845,6 +855,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreFluency"
                       min="0"
                       max="100"
@@ -857,6 +868,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreTajwid"
                       min="0"
                       max="100"
@@ -869,6 +881,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreMakhraj"
                       min="0"
                       max="100"
@@ -881,6 +894,7 @@
                     >
                     <input
                       type="number"
+                      step="any"
                       v-model="form.scoreAdab"
                       min="0"
                       max="100"
@@ -993,6 +1007,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
 import { Icon } from "@iconify/vue";
+import { useRoute, useRouter } from "vue-router";
 import DataTable from "@/components/ui/DataTable.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";
@@ -1157,6 +1172,23 @@ const hasVerdict = computed(
   () => !["UPK", "UKJ", "UA"].includes(selectedExamType.value?.category),
 );
 
+const round2 = (x) => Math.round(x * 100) / 100;
+
+// Number fields snap back into their min/max while typing, so a score can
+// never exceed its upper limit (decimals allowed via step="any").
+function clampNumber(e) {
+  const el = e.target;
+  if (el.type !== "number" || el.value === "") return;
+  const v = Number(el.value);
+  const lo = el.min === "" ? -Infinity : Number(el.min);
+  const hi = el.max === "" ? Infinity : Number(el.max);
+  const clamped = Math.min(hi, Math.max(lo, v));
+  if (clamped !== v) {
+    el.value = clamped;
+    el.dispatchEvent(new Event("input"));
+  }
+}
+
 // UPK: Capaian Target (max 30, auto) + Nilai 1-4 (max 15 each) + Tajwid (max 10)
 const upkTotal = computed(() => {
   const total =
@@ -1166,7 +1198,7 @@ const upkTotal = computed(() => {
     Number(form.nilai3 || 0) +
     Number(form.nilai4 || 0) +
     Number(form.scoreTajwid || 0);
-  return Math.min(100, Math.round(total));
+  return Math.min(100, round2(total));
 });
 
 // UKJ: Nilai 1-6 (max 15 each) + Tajwid (max 10) = max 100
@@ -1179,7 +1211,7 @@ const ukjTotal = computed(() => {
     Number(form.nilai5 || 0) +
     Number(form.nilai6 || 0) +
     Number(form.scoreTajwid || 0);
-  return Math.min(100, Math.round(total));
+  return Math.min(100, round2(total));
 });
 
 // UA: Capaian Target (max 10, auto) + Nilai 1-9 (max 10 each) = max 100
@@ -1195,7 +1227,7 @@ const uaTotal = computed(() => {
     Number(form.nilai7 || 0) +
     Number(form.nilai8 || 0) +
     Number(form.nilai9 || 0);
-  return Math.min(100, Math.round(total));
+  return Math.min(100, round2(total));
 });
 
 // Jilsah & Sertifikasi: 100 - (Khoto' Jali x 1 + Khoto' Khofi x 0.5)
@@ -1219,7 +1251,7 @@ const calculatedFinalScore = computed(() => {
     Number(form.scoreTajwid) +
     Number(form.scoreMakhraj) +
     Number(form.scoreAdab);
-  return Math.round(total / 4);
+  return round2(total / 4);
 });
 
 // Auto-fetch "Capaian Target" (achieved pages vs target) for UPK (max 30,
@@ -1516,6 +1548,26 @@ function closeModal() {
   showModal.value = false;
 }
 
+// Link from Input per Halaqah (?examStudentId=&category=UKJ|UPK&juz=): open
+// the exam form already filled with the santri, exam type and (UKJ) juz.
+const route = useRoute();
+const router = useRouter();
+async function openExamFromQuery() {
+  const studentId = Number(route.query.examStudentId);
+  if (!studentId) return;
+  const category = route.query.category;
+  const juz = Number(route.query.juz) || "";
+  router.replace({ query: {} });
+  await openModal();
+  const student =
+    studentsList.value.find((s) => s.id === studentId) ||
+    (await studentsApi.getById(studentId).catch(() => null))?.data;
+  if (student) selectStudent(student);
+  form.examTypeId =
+    examTypesList.value.find((t) => t.category === category)?.id || "";
+  form.juz = juz;
+}
+
 function handleImportSuccess(result) {
   showStatus("Import Berhasil", `${result.message}.`, "success");
   loadData();
@@ -1672,7 +1724,7 @@ async function submitExam() {
 }
 
 onMounted(async () => {
-  loadData();
+  const dataLoaded = loadData();
   // Load academic settings for form dropdowns
   try {
     const [yearsRes, semsRes, activeRes] = await Promise.all([
@@ -1696,5 +1748,7 @@ onMounted(async () => {
   } catch (e) {
     console.error("Failed to load academic settings:", e);
   }
+  await dataLoaded;
+  openExamFromQuery();
 });
 </script>

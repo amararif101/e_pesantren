@@ -66,6 +66,9 @@ export const tahfidzDeposits = mysqlTable("tahfidz_deposits", {
 });
 
 // --- Tahfidz Exams (Ujian Tahfidz / Kenaikan Jus) ---
+// Exam scores allow decimals (e.g. 7.5); "number" mode keeps them JS numbers.
+const SCORE = { precision: 5, scale: 2, mode: "number" } as const;
+
 export const tahfidzExams = mysqlTable("tahfidz_exams", {
   id: int("id").primaryKey().autoincrement(),
   studentId: int("student_id")
@@ -97,21 +100,21 @@ export const tahfidzExams = mysqlTable("tahfidz_exams", {
   endPage: int("end_page"), // For UPK
 
   // Scoring (0-100 or specific rubric)
-  scoreFluency: int("score_fluency"), // Kelancaran
-  scoreTajwid: int("score_tajwid"), // Tajwid (UPK/UKJ: max 10)
-  scoreMakhraj: int("score_makhraj"), // Makhraj
-  scoreAdab: int("score_adab"), // Adab
+  scoreFluency: decimal("score_fluency", SCORE), // Kelancaran
+  scoreTajwid: decimal("score_tajwid", SCORE), // Tajwid (UPK/UKJ: max 10)
+  scoreMakhraj: decimal("score_makhraj", SCORE), // Makhraj
+  scoreAdab: decimal("score_adab", SCORE), // Adab
 
   // UPK: Nilai 1-4 (max 15 each). UKJ: Nilai 1-6 (max 15 each). UA: Nilai 1-9 (max 10 each)
-  nilai1: int("nilai1"),
-  nilai2: int("nilai2"),
-  nilai3: int("nilai3"),
-  nilai4: int("nilai4"),
-  nilai5: int("nilai5"), // UKJ only
-  nilai6: int("nilai6"), // UKJ only
-  nilai7: int("nilai7"), // UA only
-  nilai8: int("nilai8"), // UA only
-  nilai9: int("nilai9"), // UA only
+  nilai1: decimal("nilai1", SCORE),
+  nilai2: decimal("nilai2", SCORE),
+  nilai3: decimal("nilai3", SCORE),
+  nilai4: decimal("nilai4", SCORE),
+  nilai5: decimal("nilai5", SCORE), // UKJ only
+  nilai6: decimal("nilai6", SCORE), // UKJ only
+  nilai7: decimal("nilai7", SCORE), // UA only
+  nilai8: decimal("nilai8", SCORE), // UA only
+  nilai9: decimal("nilai9", SCORE), // UA only
 
   // UPK: pages memorized in the last 2 weeks vs. target (max 30).
   // UA: same formula, max 10.
@@ -122,7 +125,7 @@ export const tahfidzExams = mysqlTable("tahfidz_exams", {
   khotoJaliCount: int("khoto_jali_count"),
   khotoKhofiCount: int("khoto_khofi_count"),
 
-  finalScore: int("final_score").notNull(),
+  finalScore: decimal("final_score", SCORE).notNull(),
   // Lulus / Tidak / Bersyarat. Null for UPK, UKJ & UA (no pass/fail concept).
   verdict: mysqlEnum("verdict", ["pass", "fail", "conditional"]),
 

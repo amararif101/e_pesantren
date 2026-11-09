@@ -12,6 +12,10 @@ import { teachers } from "../db/schema/teachers";
 import { tahfidzTargets } from "../db/schema/tahfidz";
 import { authMiddleware, requirePermission } from "../middleware/auth";
 import {
+  getHalaqahGenderAccess,
+  requireStudentGenderAccess,
+} from "../utils/gender-scope";
+import {
   createHalaqahSchema,
   updateHalaqahSchema,
   addMemberSchema,
@@ -125,7 +129,13 @@ halaqahRoute.get("/", async (c) => {
       });
     }
 
-    const data = groups.map((g) => {
+    const user = c.get("user");
+    const access = await getHalaqahGenderAccess(user.userId, user.role);
+    const visibleGroups = access
+      ? groups.filter((g) => access.canSeeHalaqah(g.id))
+      : groups;
+
+    const data = visibleGroups.map((g) => {
       const mentors = mentorsMap[g.id] || [];
       const mentorName =
         mentors.length > 0 ? mentors.map((m) => m.teacherName).join(", ") : "-";
@@ -168,10 +178,21 @@ halaqahRoute.get("/:id", async (c) => {
       return c.json({ success: false, message: "Halaqah not found" }, 404);
     }
 
-    // Get members
-    const members = await db.query.halaqahMembers.findMany({
-      where: eq(halaqahMembers.halaqahId, id),
-    });
+    const user = c.get("user");
+    const access = await getHalaqahGenderAccess(user.userId, user.role);
+    if (access && !access.canSeeHalaqah(id)) {
+      return c.json({ success: false, message: "Forbidden" }, 403);
+    }
+
+    // Get members (opposite-gender santri hidden for a scoped guru)
+    const members = (
+      await db.query.halaqahMembers.findMany({
+        where: eq(halaqahMembers.halaqahId, id),
+        with: { student: { columns: { gender: true } } },
+      })
+    )
+      .filter((m) => !access || access.canSeeMember(id, m.student?.gender))
+      .map(({ student, ...m }) => m);
 
     // Get mentors
     const mentors = await db.query.halaqahMentors.findMany({
@@ -196,6 +217,8 @@ halaqahRoute.get("/:id", async (c) => {
 halaqahRoute.get("/by-student/:studentId", async (c) => {
   try {
     const studentId = parseInt(c.req.param("studentId"));
+    const denied = await requireStudentGenderAccess(c, studentId);
+    if (denied) return denied;
 
     // Find student's halaqah membership
     const membership = await db.query.halaqahMembers.findFirst({
@@ -367,7 +390,13 @@ halaqahRoute.get("/:id/members", async (c) => {
       }),
     );
 
-    const visibleMembers = membersWithDetails.filter((m) => m.student != null);
+    const user = c.get("user");
+    const access = await getHalaqahGenderAccess(user.userId, user.role);
+    const visibleMembers = membersWithDetails.filter(
+      (m) =>
+        m.student != null &&
+        (!access || access.canSeeMember(halaqahId, m.student.gender)),
+    );
 
     return c.json({
       success: true,

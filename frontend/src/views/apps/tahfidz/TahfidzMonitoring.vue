@@ -82,6 +82,29 @@
         />
       </div>
 
+      <!-- Rekap & Mading -->
+      <div class="p-2">
+        <h2 class="text-lg font-bold text-slate-800 mb-1">
+          Rekap &amp; Mading Tahfidz
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Tren bulanan setiap rekap dan mading. Klik panah untuk membuka
+          halamannya.
+        </p>
+        <div
+          v-if="trendCards.length"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
+          <TrendCard
+            v-for="card in trendCards"
+            :key="card.to"
+            v-bind="card"
+            :months="trend.months"
+          />
+        </div>
+        <p v-else class="text-sm text-slate-400">Memuat tren...</p>
+      </div>
+
       <!-- Belum Setor -->
       <div class="p-2">
         <h2 class="text-lg font-bold text-slate-800 mb-3">
@@ -610,7 +633,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Icon } from "@iconify/vue";
 import { tahfidzApi } from "@/services/api";
 import BarChart from "@/components/charts/BarChart.vue";
@@ -618,6 +641,7 @@ import LineChart from "@/components/charts/LineChart.vue";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import StatCard from "@/components/ui/StatCard.vue";
+import TrendCard from "@/components/tahfidz/TrendCard.vue";
 
 const loading = ref(false);
 const data = ref(null);
@@ -625,6 +649,59 @@ const selectedDate = ref(new Date().toISOString().split("T")[0]);
 
 const cardClick =
   "cursor-pointer hover:border-[#602515]/40 hover:shadow-md transition";
+
+// --- Rekap & Mading trend cards ----------------------------------------
+// 24 months so a "1 Thn" card can compare with the year before it.
+const trend = ref(null);
+
+async function loadTrend() {
+  try {
+    const res = await tahfidzApi.getRecapTrend({ endDate: selectedDate.value, months: 24 });
+    trend.value = res.data;
+  } catch (e) {
+    console.error("Failed to load recap trend:", e);
+    trend.value = null;
+  }
+}
+
+const trendCards = computed(() => {
+  const t = trend.value;
+  if (!t) return [];
+  const examAvg = (category) => ({
+    values: t.exams[category].map((b) => b.avgScore),
+    weights: t.exams[category].map((b) => b.count),
+    aggregate: "avg",
+    unit: "rata-rata nilai",
+  });
+  return [
+    { title: "Rekap UKJ", to: "/apps/tahfidz/rekap-ujian?category=UKJ", ...examAvg("UKJ") },
+    { title: "Rekap UPK", to: "/apps/tahfidz/rekap-ujian?category=UPK", ...examAvg("UPK") },
+    { title: "Rekap Ujian Akhir", to: "/apps/tahfidz/rekap-ujian?category=UA", ...examAvg("UA") },
+    {
+      title: "Mading Halaqah",
+      to: "/apps/tahfidz/mading",
+      type: "bar",
+      values: t.hafalan.totalPages,
+      unit: "halaman Taqdim",
+    },
+    {
+      title: "Mading Kelas",
+      to: "/apps/tahfidz/mading-kelas",
+      type: "bar",
+      values: t.hafalan.achievedPct,
+      aggregate: "avg",
+      suffix: "%",
+      unit: "santri capai target",
+    },
+    {
+      title: "Mading Sertifikasi",
+      to: "/apps/tahfidz/mading-sertifikasi",
+      type: "bar",
+      values: t.exams.Sertifikasi.map((b) => b.count),
+      unit: "ujian sertifikasi",
+    },
+  ];
+});
 
 // --- Detail modal -----------------------------------------------------
 const detail = ref(null);
@@ -959,6 +1036,7 @@ async function exportToExcel() {
 
 async function loadDashboard() {
   loading.value = true;
+  loadTrend();
   try {
     const res = await tahfidzApi.getMonitoringDashboard(selectedDate.value);
     if (res.success) {
