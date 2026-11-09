@@ -594,8 +594,29 @@
                   <p v-else class="text-xs text-slate-400 mt-1">
                     {{ form.capaianTargetPages || 0 }} halaman dihafal dari
                     target {{ capaianTargetPagesTarget }} halaman
+                    <span v-if="capaianInfo?.weeklyTarget"
+                      >({{ capaianInfo.weeklyTarget }} hal/pekan x 2 pekan{{
+                        capaianInfo.weeklyTargetDerived
+                          ? ", otomatis dari target bulanan"
+                          : ""
+                      }})</span
+                    >
                     <span v-if="!form.studentId || !form.examDate"
                       >(pilih santri &amp; tanggal ujian dahulu)</span
+                    >
+                  </p>
+                  <p
+                    v-if="!form.id && capaianInfo"
+                    class="text-xs text-slate-500 mt-1 pt-1 border-t border-slate-100"
+                  >
+                    Rekap input harian {{ formatShortDate(capaianInfo.windowStart) }}
+                    - {{ formatShortDate(capaianInfo.windowEnd) }}:
+                    <span class="font-medium"
+                      >{{ capaianInfo.depositCount }} setoran Taqdim</span
+                    ><span v-if="capaianInfo.startPage != null">
+                      , Hal. {{ capaianInfo.startPage }} -
+                      {{ capaianInfo.endPage }} (terisi otomatis, bisa
+                      diubah)</span
                     >
                   </p>
                 </div>
@@ -1115,6 +1136,18 @@ const form = reactive({
 // capaianTargetScore, shown next to the auto-fetched achieved pages.
 const capaianTargetPagesTarget = ref(0);
 
+// UPK only: weekly-target details and the daily-input recap returned by the
+// capaian-target endpoint (window dates, deposit count, first/last page).
+const capaianInfo = ref(null);
+
+function formatShortDate(d) {
+  if (!d) return "-";
+  return new Date(d).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 const selectedExamType = computed(() => {
   return examTypesList.value.find((t) => t.id === form.examTypeId);
 });
@@ -1210,6 +1243,12 @@ async function refreshCapaianTarget() {
       form.capaianTargetPages = res.data.achievedPages;
       form.capaianTargetScore = res.data.capaianTargetScore;
       capaianTargetPagesTarget.value = res.data.targetPages;
+      capaianInfo.value = category === "UPK" ? res.data : null;
+      // UPK: Hal. Awal / Hal. Akhir come from the daily Taqdim input
+      if (category === "UPK") {
+        form.startPage = res.data.startPage ?? "";
+        form.endPage = res.data.endPage ?? "";
+      }
     }
   } catch (e) {
     console.error("Failed to fetch capaian target:", e);
@@ -1414,6 +1453,7 @@ async function openModal() {
   form.khotoJaliCount = 0;
   form.khotoKhofiCount = 0;
   capaianTargetPagesTarget.value = 0;
+  capaianInfo.value = null;
   form.verdict = "pass";
   form.notes = "";
   studentSearch.value = ""; // Reset search input

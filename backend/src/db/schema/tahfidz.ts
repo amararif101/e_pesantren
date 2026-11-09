@@ -137,6 +137,9 @@ export const tahfidzTargets = mysqlTable("tahfidz_targets", {
   id: int("id").primaryKey().autoincrement(),
   level: varchar("level", { length: 50 }).notNull().unique(), // e.g., "SD", "SMP", "SMA", "Tahfidz"
   targetPages: int("target_pages").notNull(), // Target halaman per bulan
+  // Target halaman per pekan, dipakai untuk Capaian Target UPK.
+  // Jika kosong, diturunkan dari target bulanan (target bulanan / 4).
+  targetPagesPerWeek: int("target_pages_per_week"),
   targetJuz: decimal("target_juz", { precision: 4, scale: 2 }), // Target juz per semester
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),

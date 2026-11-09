@@ -190,6 +190,13 @@
       "when": 1794186328477,
       "tag": "0026_verdict_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1794189040347,
+      "tag": "0027_target_pages_per_week",
+      "breakpoints": true
     }
   ]
 }

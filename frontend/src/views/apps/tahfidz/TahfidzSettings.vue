@@ -74,6 +74,9 @@
                 Target (Halaman/Bulan)
               </th>
               <th class="p-3 text-center font-medium text-slate-700">
+                Target UPK (Halaman/Pekan)
+              </th>
+              <th class="p-3 text-center font-medium text-slate-700">
                 Target (Juz/Smt)
               </th>
               <th class="p-3 text-left font-medium text-slate-700">
@@ -90,6 +93,21 @@
                   class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full font-bold"
                 >
                   {{ t.targetPages }}
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <span
+                  v-if="t.targetPagesPerWeek"
+                  class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-bold"
+                >
+                  {{ t.targetPagesPerWeek }}
+                </span>
+                <span
+                  v-else
+                  class="text-slate-400"
+                  title="Belum diisi; dihitung dari target bulanan / 4"
+                >
+                  {{ weeklyFallback(t) }} (otomatis)
                 </span>
               </td>
               <td class="p-3 text-center">
@@ -154,6 +172,13 @@
                 class="inline-block mt-1 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold"
               >
                 Target: {{ t.targetPages }} Halaman/Bulan
+              </span>
+              <span
+                class="inline-block mt-1 ml-1 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold"
+              >
+                UPK: {{ t.targetPagesPerWeek || weeklyFallback(t) }} Hal/Pekan{{
+                  t.targetPagesPerWeek ? "" : " (otomatis)"
+                }}
               </span>
               <span
                 v-if="t.targetJuz"
@@ -606,6 +631,23 @@
 
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">
+              Target UPK (Halaman per Pekan)
+            </label>
+            <input
+              v-model.number="form.targetPagesPerWeek"
+              type="number"
+              min="1"
+              :placeholder="`kosong = otomatis (${weeklyFallback(form)})`"
+              class="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-[#602515]/20 outline-none"
+            />
+            <p class="mt-1 text-xs text-slate-400">
+              Capaian Target UPK dihitung dari target ini x 2 pekan. Jika
+              dikosongkan, dipakai target bulanan / 4.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">
               Target (Juz per Semester)
             </label>
             <input
@@ -708,9 +750,15 @@ const form = reactive({
   id: null,
   level: "",
   targetPages: 6,
+  targetPagesPerWeek: null,
   targetJuz: 1,
   description: "",
 });
+
+// Same fallback the backend uses when no weekly target is stored.
+function weeklyFallback(t) {
+  return Math.max(1, Math.ceil((Number(t.targetPages) || 0) / 4));
+}
 
 const headerForm = reactive({
   institutionName: "",
@@ -765,12 +813,14 @@ function openModal(item = null) {
     form.id = item.id;
     form.level = item.level;
     form.targetPages = item.targetPages;
+    form.targetPagesPerWeek = item.targetPagesPerWeek || null;
     form.targetJuz = item.targetJuz || 0;
     form.description = item.description || "";
   } else {
     form.id = null;
     form.level = "";
     form.targetPages = 6;
+    form.targetPagesPerWeek = null;
     form.targetJuz = 1;
     form.description = "";
   }
@@ -788,6 +838,7 @@ async function saveTarget() {
     const payload = {
       level: form.level,
       targetPages: form.targetPages,
+      targetPagesPerWeek: form.targetPagesPerWeek || null,
       targetJuz: form.targetJuz,
       description: form.description || null,
     };

@@ -990,13 +990,17 @@ app.get("/capaian-target/:studentId", async (c) => {
       }
     }
 
-    if (!target) target = allTargets[0] || ({ targetPages: 50, level: "Default" } as any);
+    const levelTarget: { targetPages: number; targetPagesPerWeek?: number | null } =
+      target || allTargets[0] || { targetPages: 50 };
 
-    const baseTargetPages = target.targetPages || 50;
+    const baseTargetPages = levelTarget.targetPages || 50;
     const examDate = new Date(examDateStr);
 
+    const UPK_WINDOW_WEEKS = 2;
     let targetPages: number;
     let startWindow: Date;
+    let weeklyTarget: number | null = null;
+    let weeklyTargetDerived = false;
 
     if (category === "UA") {
       // UA: window 1 semester berjalan (Jul-Des atau Jan-Jun) s.d. examDate,
@@ -1007,14 +1011,25 @@ app.get("/capaian-target/:studentId", async (c) => {
         : new Date(examDate.getFullYear(), 6, 1);
       targetPages = baseTargetPages * 6;
     } else {
-      // UPK: window 14 hari terakhir s.d. examDate
+      // UPK: window 2 pekan (14 hari) s.d. examDate. Target = target per
+      // pekan level kelompok tahfidz x 2 pekan; bila target pekanan belum
+      // diisi, diturunkan dari target bulanan (bulanan / 4).
       startWindow = new Date(examDate);
       startWindow.setDate(startWindow.getDate() - 13);
-      targetPages = baseTargetPages;
+      weeklyTarget =
+        levelTarget.targetPagesPerWeek ||
+        Math.max(1, Math.ceil(baseTargetPages / 4));
+      weeklyTargetDerived = !levelTarget.targetPagesPerWeek;
+      targetPages = weeklyTarget * UPK_WINDOW_WEEKS;
     }
 
     const recentDeposits = await db
-      .select({ totalPages: tahfidzDeposits.totalPages })
+      .select({
+        depositDate: tahfidzDeposits.depositDate,
+        totalPages: tahfidzDeposits.totalPages,
+        startPage: tahfidzDeposits.startPage,
+        endPage: tahfidzDeposits.endPage,
+      })
       .from(tahfidzDeposits)
       .where(
         and(
@@ -1023,12 +1038,23 @@ app.get("/capaian-target/:studentId", async (c) => {
           sql`DATE(${tahfidzDeposits.depositDate}) >= ${startWindow.toISOString().split("T")[0]}`,
           sql`DATE(${tahfidzDeposits.depositDate}) <= ${examDateStr}`,
         ),
-      );
+      )
+      .orderBy(asc(tahfidzDeposits.depositDate), asc(tahfidzDeposits.id));
 
     const achievedPages = recentDeposits.reduce(
       (sum, d) => sum + (Number(d.totalPages) || 0),
       0,
     );
+
+    // Hal. Awal / Hal. Akhir recap from the daily input: first page of the
+    // earliest Taqdim and last page of the latest one in the window.
+    const withPages = recentDeposits.filter(
+      (d) => d.startPage != null && d.endPage != null,
+    );
+    const startPage = withPages.length ? withPages[0]!.startPage : null;
+    const endPage = withPages.length
+      ? withPages[withPages.length - 1]!.endPage
+      : null;
 
     const capaianTargetScore = Math.round(
       Math.min(achievedPages / targetPages, 1) * maxScore * 100,
@@ -1040,6 +1066,14 @@ app.get("/capaian-target/:studentId", async (c) => {
         achievedPages,
         targetPages,
         capaianTargetScore,
+        // UPK weekly-target details + daily input recap (null/absent for UA)
+        weeklyTarget,
+        weeklyTargetDerived,
+        windowStart: startWindow.toISOString().split("T")[0],
+        windowEnd: examDateStr,
+        depositCount: recentDeposits.length,
+        startPage,
+        endPage,
       },
     });
   } catch (e: any) {
@@ -2681,6 +2715,7 @@ app.get("/halaqah-report", async (c) => {
 const targetSchema = z.object({
   level: z.string().min(1),
   targetPages: z.number().min(1),
+  targetPagesPerWeek: z.number().min(1).optional().nullable(),
   targetJuz: z.number().optional().nullable(),
   description: z.string().nullable().optional(),
 });
