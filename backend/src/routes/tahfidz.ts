@@ -2194,6 +2194,189 @@ app.get("/halaqah/:groupId/health-summary", async (c) => {
   }
 });
 
+// --- EXAM RECAP ---
+// GET /exam-recap?category=UKJ|UPK|UA - one row per active santri (including
+// those with no exam yet) summarising their exams of that category in the
+// optional date range. Used by the "Rekap Ujian" page.
+app.get("/exam-recap", async (c) => {
+  const category = c.req.query("category") as "UKJ" | "UPK" | "UA" | undefined;
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const classId = c.req.query("classId");
+  const halaqahId = c.req.query("halaqahId");
+  const gender = c.req.query("gender");
+
+  if (!category || !["UKJ", "UPK", "UA"].includes(category)) {
+    return c.json(
+      { success: false, message: "category harus UKJ, UPK, atau UA" },
+      400,
+    );
+  }
+
+  try {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+
+    const conditions: any[] = [eq(students.status, "active")];
+    if (allowedIds) {
+      if (!allowedIds.length) {
+        return c.json({ success: true, data: { summary: null, rows: [] } });
+      }
+      conditions.push(inArray(students.id, allowedIds));
+    } else if (gender) {
+      conditions.push(eq(students.gender, gender as "male" | "female"));
+    }
+    if (classId) conditions.push(eq(students.classId, Number(classId)));
+    if (halaqahId) conditions.push(eq(halaqahMembers.halaqahId, Number(halaqahId)));
+
+    const studentRows = await db
+      .select({
+        id: students.id,
+        nis: students.nis,
+        fullName: students.fullName,
+        gender: students.gender,
+        className: classes.name,
+        halaqahName: halaqahGroups.name,
+      })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(
+        halaqahMembers,
+        and(
+          eq(halaqahMembers.studentId, students.id),
+          eq(halaqahMembers.status, "active"),
+        ),
+      )
+      .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
+      .where(and(...conditions))
+      .orderBy(asc(classes.name), asc(students.fullName));
+
+    // A student could appear twice if enrolled in two active halaqah
+    const seen = new Set<number>();
+    const roster = studentRows.filter((s) =>
+      seen.has(s.id) ? false : (seen.add(s.id), true),
+    );
+
+    const examConditions: any[] = [eq(tahfidzExams.examCategory, category)];
+    if (roster.length) {
+      examConditions.push(
+        inArray(
+          tahfidzExams.studentId,
+          roster.map((s) => s.id),
+        ),
+      );
+    }
+    if (startDate) examConditions.push(sql`${tahfidzExams.examDate} >= ${startDate}`);
+    if (endDate) examConditions.push(sql`${tahfidzExams.examDate} <= ${endDate}`);
+
+    const exams = roster.length
+      ? await db
+          .select({
+            studentId: tahfidzExams.studentId,
+            examDate: tahfidzExams.examDate,
+            juz: tahfidzExams.juz,
+            finalScore: tahfidzExams.finalScore,
+            capaianTargetPages: tahfidzExams.capaianTargetPages,
+            capaianTargetScore: tahfidzExams.capaianTargetScore,
+          })
+          .from(tahfidzExams)
+          .where(and(...examConditions))
+          .orderBy(asc(tahfidzExams.examDate), asc(tahfidzExams.id))
+      : [];
+
+    const examsByStudent = new Map<number, typeof exams>();
+    for (const e of exams) {
+      const list = examsByStudent.get(e.studentId) || [];
+      list.push(e);
+      examsByStudent.set(e.studentId, list);
+    }
+
+    // Capaian Target is scored out of 30 (UPK) / 10 (UA); anything below the
+    // max means the santri fell short of the target pages.
+    const capaianMax = category === "UPK" ? 30 : category === "UA" ? 10 : null;
+    const toDateStr = (d: any) => new Date(d).toISOString().split("T")[0];
+
+    const rows = roster.map((s) => {
+      const list = examsByStudent.get(s.id) || [];
+      const last = list[list.length - 1];
+      const totalScore = list.reduce((sum, e) => sum + Number(e.finalScore || 0), 0);
+      const belowTargetCount = capaianMax
+        ? list.filter(
+            (e) =>
+              e.capaianTargetScore != null &&
+              Number(e.capaianTargetScore) < capaianMax,
+          ).length
+        : 0;
+
+      return {
+        studentId: s.id,
+        nis: s.nis,
+        fullName: s.fullName,
+        gender: s.gender,
+        className: s.className || null,
+        halaqahName: s.halaqahName || null,
+        examCount: list.length,
+        totalScore,
+        avgScore: list.length ? Math.round((totalScore / list.length) * 100) / 100 : null,
+        lastDate: last ? toDateStr(last.examDate) : null,
+        lastScore: last ? Number(last.finalScore) : null,
+        lastCapaianPages: last?.capaianTargetPages ?? null,
+        lastCapaianScore:
+          last?.capaianTargetScore != null ? Number(last.capaianTargetScore) : null,
+        belowTargetCount,
+        belowTarget:
+          capaianMax != null &&
+          last?.capaianTargetScore != null &&
+          Number(last.capaianTargetScore) < capaianMax,
+        // UKJ: every juz this santri has taken UKJ for (latest attempt per juz)
+        juzList:
+          category === "UKJ"
+            ? [
+                ...new Map(
+                  list
+                    .filter((e) => e.juz != null)
+                    .map((e) => [
+                      e.juz as number,
+                      {
+                        juz: e.juz as number,
+                        date: toDateStr(e.examDate),
+                        score: Number(e.finalScore),
+                      },
+                    ]),
+                ).values(),
+              ].sort((a, b) => a.juz - b.juz)
+            : undefined,
+      };
+    });
+
+    const examined = rows.filter((r) => r.examCount > 0);
+    const allScores = exams.map((e) => Number(e.finalScore || 0));
+
+    return c.json({
+      success: true,
+      data: {
+        summary: {
+          totalStudents: rows.length,
+          examinedStudents: examined.length,
+          notExaminedStudents: rows.length - examined.length,
+          totalExams: exams.length,
+          avgScore: allScores.length
+            ? Math.round((allScores.reduce((a, b) => a + b, 0) / allScores.length) * 100) / 100
+            : null,
+          belowTargetStudents: rows.filter((r) => r.belowTarget).length,
+        },
+        rows,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 // --- HALAQAH REPORT ---
 // GET /sertifikasi-report - Mading Sertifikasi: per-halaqah wall report of
 // each member's Sertifikasi exam status/date/score/verdict for a date range.

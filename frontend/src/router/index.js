@@ -546,6 +546,11 @@ const router = createRouter({
           component: () => import("@/views/apps/tahfidz/TahfidzExams.vue"),
         },
         {
+          path: "apps/tahfidz/rekap-ujian",
+          name: "TahfidzRekapUjian",
+          component: () => import("@/views/apps/tahfidz/TahfidzRekapUjian.vue"),
+        },
+        {
           path: "apps/tahfidz/reports",
           name: "TahfidzReports",
           component: () => import("@/views/apps/tahfidz/TahfidzReports.vue"),

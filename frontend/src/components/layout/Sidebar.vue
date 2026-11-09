@@ -131,6 +131,7 @@ const submenuByMain = {
           { label: "Mutaba'ah", route: "/apps/tahfidz/dashboard" },
           { label: "Input per Halaqah", route: "/apps/tahfidz/halaqah" },
           { label: "Ujian Tahfidz", route: "/apps/tahfidz/exams" },
+          { label: "Rekap Ujian", route: "/apps/tahfidz/rekap-ujian" },
           { label: "Rapor", route: "/apps/tahfidz/reports" },
           { label: "Mading Halaqah", route: "/apps/tahfidz/mading" },
           {

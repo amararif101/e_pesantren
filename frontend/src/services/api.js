@@ -1861,6 +1861,10 @@ export const tahfidzApi = {
     const query = new URLSearchParams(params).toString();
     return request(`/api/tahfidz/sertifikasi-report?${query}`);
   },
+  async getExamRecap(params) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/exam-recap?${query}`);
+  },
   // Target Settings
   async getTargets() {
     return request("/api/tahfidz/targets");
