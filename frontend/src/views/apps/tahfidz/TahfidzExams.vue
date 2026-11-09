@@ -173,7 +173,9 @@
       </template>
 
       <template #cell-verdict="{ item }">
+        <span v-if="!item.verdict" class="text-slate-300">-</span>
         <span
+          v-else
           class="px-2 py-1 rounded-full text-xs font-medium uppercase"
           :class="{
             'bg-green-100 text-green-700': item.verdict === 'pass',
@@ -239,6 +241,7 @@
               <p class="text-sm text-slate-500 truncate">{{ item.type }}</p>
             </div>
             <span
+              v-if="item.verdict"
               class="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
               :class="{
                 'bg-green-100 text-green-700': item.verdict === 'pass',
@@ -880,9 +883,9 @@
                 </div>
               </div>
 
-              <!-- Keputusan -->
+              <!-- Keputusan (tidak berlaku untuk UPK, UKJ & UA) -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div v-if="hasVerdict">
                   <label class="block text-sm font-medium text-slate-700 mb-1"
                     >Keputusan</label
                   >
@@ -895,7 +898,7 @@
                     <option value="fail">TIDAK LULUS</option>
                   </select>
                 </div>
-                <div>
+                <div :class="{ 'md:col-span-2': !hasVerdict }">
                   <label class="block text-sm font-medium text-slate-700 mb-1"
                     >Catatan</label
                   >
@@ -1115,6 +1118,11 @@ const capaianTargetPagesTarget = ref(0);
 const selectedExamType = computed(() => {
   return examTypesList.value.find((t) => t.id === form.examTypeId);
 });
+
+// UPK, UKJ & UA are scored only; there is no Lulus/Tidak Lulus decision.
+const hasVerdict = computed(
+  () => !["UPK", "UKJ", "UA"].includes(selectedExamType.value?.category),
+);
 
 // UPK: Capaian Target (max 30, auto) + Nilai 1-4 (max 15 each) + Tajwid (max 10)
 const upkTotal = computed(() => {
@@ -1594,7 +1602,7 @@ async function submitExam() {
           ? Number(form.directFinalScore)
           : calculatedFinalScore.value,
 
-      verdict: form.verdict,
+      verdict: hasVerdict.value ? form.verdict : null,
       notes: form.notes,
     };
 

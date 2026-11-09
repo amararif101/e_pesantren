@@ -123,7 +123,8 @@ export const tahfidzExams = mysqlTable("tahfidz_exams", {
   khotoKhofiCount: int("khoto_khofi_count"),
 
   finalScore: int("final_score").notNull(),
-  verdict: mysqlEnum("verdict", ["pass", "fail", "conditional"]).notNull(), // Lulus / Tidak / Bersyarat
+  // Lulus / Tidak / Bersyarat. Null for UPK, UKJ & UA (no pass/fail concept).
+  verdict: mysqlEnum("verdict", ["pass", "fail", "conditional"]),
 
   notes: text("notes"),
 

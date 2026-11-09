@@ -1222,7 +1222,7 @@ studentsRoute.get("/:id/timeline", async (c) => {
           date: item.examDate,
           category: "tahfidz",
           title: `Ujian tahfidz ${item.examType}`,
-          description: `${item.examCategory || "Ujian"} • Nilai ${item.finalScore} • ${item.verdict}`,
+          description: `${item.examCategory || "Ujian"} • Nilai ${item.finalScore}${item.verdict ? ` • ${item.verdict}` : ""}`,
           meta: item,
         }),
       ),

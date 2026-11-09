@@ -510,7 +510,9 @@
                       :key="exam.id"
                       :class="[
                         'rounded-lg p-3',
-                        exam.verdict === 'pass'
+                        !exam.verdict
+                          ? 'bg-slate-50'
+                          : exam.verdict === 'pass'
                           ? 'bg-green-50'
                           : exam.verdict === 'fail'
                           ? 'bg-red-50'
@@ -522,6 +524,7 @@
                           exam.examType
                         }}</span>
                         <span
+                          v-if="exam.verdict"
                           :class="[
                             'text-sm px-2 py-0.5 rounded-full font-medium',
                             exam.verdict === 'pass'

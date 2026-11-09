@@ -76,16 +76,16 @@ export async function checkJuzCompletionBlock(
     return { blocked: false, completedJuz: null };
   }
 
-  const passedUKJ = await db.query.tahfidzExams.findFirst({
+  // UKJ has no pass/fail: any recorded UKJ for this juz unblocks Taqdim.
+  const takenUKJ = await db.query.tahfidzExams.findFirst({
     where: and(
       eq(tahfidzExams.studentId, studentId),
       eq(tahfidzExams.examCategory, "UKJ"),
       eq(tahfidzExams.juz, completedJuz),
-      eq(tahfidzExams.verdict, "pass"),
     ),
   });
 
-  return passedUKJ
+  return takenUKJ
     ? { blocked: false, completedJuz: null }
     : { blocked: true, completedJuz };
 }

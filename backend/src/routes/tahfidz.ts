@@ -145,7 +145,8 @@ const examSchema = z.object({
   khotoJaliCount: z.number().nullable().optional(),
   khotoKhofiCount: z.number().nullable().optional(),
   finalScore: z.number(),
-  verdict: z.enum(["pass", "fail", "conditional"]),
+  // Not used for UPK, UKJ & UA (no pass/fail concept)
+  verdict: z.enum(["pass", "fail", "conditional"]).nullable().optional(),
   notes: z.string().optional(),
 });
 
@@ -2743,8 +2744,9 @@ app.get("/report-card/:studentId", async (c) => {
       .where(and(...examConditions))
       .orderBy(asc(tahfidzExams.examDate));
 
-    // 2b. Cumulative UKJ Count (Passed Juz - All Time)
-    // We want total juz student has passed UKJ for, regardless of semester
+    // 2b. Cumulative UKJ Count (Juz with a recorded UKJ - All Time)
+    // UKJ has no pass/fail; count every juz the student has taken UKJ for,
+    // regardless of semester
     const passedUKJ = await db
       .select({ juz: tahfidzExams.juz })
       .from(tahfidzExams)
@@ -2752,7 +2754,6 @@ app.get("/report-card/:studentId", async (c) => {
         and(
           eq(tahfidzExams.studentId, studentId),
           eq(tahfidzExams.examCategory, "UKJ"),
-          eq(tahfidzExams.verdict, "pass"),
         ),
       );
     const uniqueJuzUKJ = new Set(
@@ -3293,8 +3294,12 @@ app.get("/exams/template", async (c) => {
         "scoreAdab",
         "notes",
       );
+    } else if (category === "UA") {
+      // UA has no pass/fail
+      headers.push("Nilai Akhir (0-100)", "Catatan");
+      keys.push("finalScore", "notes");
     } else {
-      // UA, Suluk, Other
+      // Suluk, Other
       headers.push(
         "Nilai Akhir (0-100)",
         "Keterangan (Lulus/Tidak/Bersyarat)",
@@ -3508,6 +3513,9 @@ app.post("/exams/import", async (c) => {
           calculatedFinalScore = Math.round(
             scores.reduce((a, b) => a + b, 0) / 4,
           );
+        } else if (category === "UA") {
+          calculatedFinalScore = Number(row["Nilai Akhir (0-100)"]) || 0;
+          payload.notes = row["Catatan"];
         } else {
           calculatedFinalScore = Number(row["Nilai Akhir (0-100)"]) || 0;
 
@@ -3535,8 +3543,9 @@ app.post("/exams/import", async (c) => {
         }
 
         payload.finalScore = calculatedFinalScore;
-        if (category === "UPK" || category === "UKJ") {
-          payload.verdict = calculatedFinalScore >= 75 ? "pass" : "fail";
+        // UPK, UKJ & UA have no pass/fail verdict
+        if (category === "UPK" || category === "UKJ" || category === "UA") {
+          payload.verdict = null;
         }
 
         // For Suluk and UA, check for duplicate (one per student per semester per academic year)
