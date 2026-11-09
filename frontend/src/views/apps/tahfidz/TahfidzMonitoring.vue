@@ -656,7 +656,7 @@ const trend = ref(null);
 
 async function loadTrend() {
   try {
-    const res = await tahfidzApi.getRecapTrend({ endDate: selectedDate.value, months: 24 });
+    const res = await tahfidzApi.getRecapTrend({ endDate: selectedDate.value });
     trend.value = res.data;
   } catch (e) {
     console.error("Failed to load recap trend:", e);

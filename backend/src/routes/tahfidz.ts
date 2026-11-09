@@ -2563,7 +2563,7 @@ app.get("/class-report", async (c) => {
 });
 
 // --- RECAP & MADING TREND ---
-// GET /recap-trend?endDate=YYYY-MM-DD&months=24 - month-by-month trend behind
+// GET /recap-trend?endDate=YYYY-MM-DD - 24-month trend behind
 // the Rekap & Mading cards on the monitoring dashboard: exam count / average
 // per category, Taqdim pages and the share of santri reaching their monthly
 // level target. 24 months lets a 1-year card compare with the year before.
@@ -2572,7 +2572,7 @@ app.get("/class-report", async (c) => {
 app.get("/recap-trend", requirePermission("/apps/tahfidz/monitoring"), async (c) => {
   const pad = (n: number) => String(n).padStart(2, "0");
   const end = new Date(c.req.query("endDate") || Date.now());
-  const count = Math.min(24, Math.max(1, Number(c.req.query("months")) || 24));
+  const count = 24;
   const months = Array.from({ length: count }, (_, i) => {
     const d = new Date(end.getFullYear(), end.getMonth() - (count - 1 - i), 1);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
@@ -2650,8 +2650,9 @@ app.get("/recap-trend", requirePermission("/apps/tahfidz/monitoring"), async (c)
     const examRows = await db
       .select({
         category: tahfidzExams.examCategory,
-        month: ym(tahfidzExams.examDate),
-        finalScore: tahfidzExams.finalScore,
+        month: ym(tahfidzExams.examDate).as("month"),
+        count: sql<number>`count(*)`,
+        avg: sql<string>`avg(${tahfidzExams.finalScore})`,
       })
       .from(tahfidzExams)
       .where(
@@ -2661,26 +2662,15 @@ app.get("/recap-trend", requirePermission("/apps/tahfidz/monitoring"), async (c)
           sql`${tahfidzExams.examDate} >= ${rangeStart}`,
           sql`${tahfidzExams.examDate} <= ${rangeEnd}`,
         ),
-      );
-    const buckets = Object.fromEntries(
-      CATEGORIES.map((cat) => [
-        cat,
-        months.map(() => ({ count: 0, total: 0 })),
-      ]),
-    );
-    for (const e of examRows) {
-      const b = buckets[e.category!]?.[months.indexOf(e.month)];
-      if (!b) continue;
-      b.count++;
-      b.total += Number(e.finalScore) || 0;
-    }
+      )
+      .groupBy(tahfidzExams.examCategory, sql`month`);
     const exams = Object.fromEntries(
       CATEGORIES.map((cat) => [
         cat,
-        buckets[cat]!.map((b) => ({
-          count: b.count,
-          avgScore: b.count ? round2(b.total / b.count) : null,
-        })),
+        months.map((m) => {
+          const r = examRows.find((r) => r.category === cat && r.month === m);
+          return { count: Number(r?.count ?? 0), avgScore: r ? round2(Number(r.avg)) : null };
+        }),
       ]),
     );
 

@@ -453,7 +453,7 @@
                     <button
                       v-if="item.juzBlock?.blocked"
                       type="button"
-                      @click.stop="showJuzBlockNotice(item)"
+                      @click.stop="openExamInput(item, 'UKJ', item.juzBlock.completedJuz)"
                       class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
                       title="Belum bisa Taqdim - klik untuk input UKJ"
                     >
@@ -1350,18 +1350,14 @@ function pillLabel(item, type) {
   return deposit ? `${label}: ${deposit.isCompleted ? "Sudah" : "Belum"}` : label;
 }
 
-// Open the exam form on the Ujian page already filled for this santri.
+// Open the exam form on the Ujian page already filled for this santri
+// (UPK pill, or UKJ for the juz a blocked santri just finished).
 const router = useRouter();
 function openExamInput(item, category, juz) {
   router.push({
     path: "/apps/tahfidz/exams",
     query: { examStudentId: item.student.id, category, juz },
   });
-}
-
-// Santri blocked from Taqdim: go straight to the UKJ input for that juz.
-function showJuzBlockNotice(item) {
-  openExamInput(item, "UKJ", item.juzBlock.completedJuz);
 }
 
 function getStatusText(status) {
@@ -1747,7 +1743,7 @@ async function openModal(item, bulk = false, presetType = null) {
   // Taqdim is blocked once the student has finished a juz until they pass
   // the UKJ exam for it (also enforced server-side).
   if (!bulk && presetType === "ziyadah" && item?.juzBlock?.blocked) {
-    showJuzBlockNotice(item);
+    openExamInput(item, "UKJ", item.juzBlock.completedJuz);
     return;
   }
 

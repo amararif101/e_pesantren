@@ -120,7 +120,7 @@ function summarize(from, to) {
 const summary = computed(() => {
   const end = props.values.length;
   const value = summarize(end - range.value, end);
-  const prev = end > range.value ? summarize(end - 2 * range.value, end - range.value) : null;
+  const prev = summarize(end - 2 * range.value, end - range.value);
   const delta = value != null && prev ? round(((value - prev) / prev) * 100) : null;
   return { value, delta };
 });
