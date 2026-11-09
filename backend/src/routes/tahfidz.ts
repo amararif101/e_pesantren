@@ -1359,11 +1359,20 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     let manzilMissing = 0;
     let excusedCount = 0;
     const perHalaqahSubmission = [];
+    // Per-halaqah input completeness for today (who the musyrif still has to
+    // input, and which of Taqdim/Sabqi/Manzil is missing)
+    const dailyCompleteness: any[] = [];
 
     groups.forEach((g) => {
       let hZiyadahMissing = 0;
       let hSabqiMissing = 0;
       let hManzilMissing = 0;
+      let hExcused = 0;
+      const missingStudents: {
+        studentId: number;
+        fullName: string | undefined;
+        missingTypes: string[];
+      }[] = [];
       g.members.forEach((m) => {
         const studentDeposits = depositsByStudent.get(m.studentId) || [];
         const exception = studentDeposits.find((d) =>
@@ -1377,12 +1386,21 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         }
         if (exception) {
           excusedCount++;
+          hExcused++;
           return; // excused students are not counted as "belum setor"
         }
         const hasType = (t) => studentDeposits.some((d) => d.type === t);
-        if (!hasType("ziyadah")) { ziyadahMissing++; hZiyadahMissing++; }
-        if (!hasType("sabqi")) { sabqiMissing++; hSabqiMissing++; }
-        if (!hasType("manzil")) { manzilMissing++; hManzilMissing++; }
+        const missingTypes: string[] = [];
+        if (!hasType("ziyadah")) { ziyadahMissing++; hZiyadahMissing++; missingTypes.push("ziyadah"); }
+        if (!hasType("sabqi")) { sabqiMissing++; hSabqiMissing++; missingTypes.push("sabqi"); }
+        if (!hasType("manzil")) { manzilMissing++; hManzilMissing++; missingTypes.push("manzil"); }
+        if (missingTypes.length) {
+          missingStudents.push({
+            studentId: m.studentId,
+            fullName: m.student?.fullName,
+            missingTypes,
+          });
+        }
       });
       perHalaqahSubmission.push({
         halaqahId: g.id,
@@ -1390,6 +1408,29 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         ziyadahMissing: hZiyadahMissing,
         sabqiMissing: hSabqiMissing,
         manzilMissing: hManzilMissing,
+      });
+
+      const expected = g.members.length - hExcused;
+      const noInputCount = missingStudents.filter((s) => s.missingTypes.length === 3).length;
+      dailyCompleteness.push({
+        halaqahId: g.id,
+        halaqahName: g.name,
+        mentors: g.mentors.map((mt) => mt.teacher?.fullName || "-"),
+        totalStudents: g.members.length,
+        expectedStudents: expected,
+        noInputCount,
+        partialCount: missingStudents.length - noInputCount,
+        // none: nobody inputted yet | partial: some Taqdim/Sabqi/Manzil
+        // missing | complete: everything inputted | excused: nobody expected
+        status:
+          expected === 0
+            ? "excused"
+            : noInputCount === expected
+              ? "none"
+              : missingStudents.length
+                ? "partial"
+                : "complete",
+        missingStudents,
       });
     });
 
@@ -1538,6 +1579,7 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         g.members.map(async (m) => ({
           studentId: m.studentId,
           fullName: m.student?.fullName,
+          halaqahId: g.id,
           halaqahName: g.name,
           block: await safeCheckJuzCompletionBlock(m.studentId),
         })),
@@ -1548,9 +1590,67 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
       .map((r) => ({
         studentId: r.studentId,
         fullName: r.fullName,
+        halaqahId: r.halaqahId,
         halaqahName: r.halaqahName,
         juz: r.block.completedJuz,
       }));
+
+    // 9b. Exam input completeness per halaqah: santri with no UPK in the
+    // 2-week window ending on the selected date, and santri who finished a
+    // juz but whose UKJ has not been inputted yet (= the UKJ-blocked list).
+    const upkWindowStart = new Date(targetDate);
+    upkWindowStart.setDate(upkWindowStart.getDate() - 13);
+    const upkWindowStartStr = upkWindowStart.toISOString().split("T")[0];
+    const upkRows = activeStudentIds.length
+      ? await db
+          .select({ studentId: tahfidzExams.studentId })
+          .from(tahfidzExams)
+          .where(
+            and(
+              inArray(tahfidzExams.studentId, activeStudentIds),
+              eq(tahfidzExams.examCategory, "UPK"),
+              sql`${tahfidzExams.examDate} >= ${upkWindowStartStr}`,
+              sql`${tahfidzExams.examDate} <= ${dateStr}`,
+            ),
+          )
+      : [];
+    const studentsWithUpk = new Set(upkRows.map((r) => r.studentId));
+    const examCompleteness = groups.map((g) => ({
+      halaqahId: g.id,
+      halaqahName: g.name,
+      mentors: g.mentors.map((mt) => mt.teacher?.fullName || "-"),
+      totalStudents: g.members.length,
+      upkMissing: g.members
+        .filter((m) => !studentsWithUpk.has(m.studentId))
+        .map((m) => ({ studentId: m.studentId, fullName: m.student?.fullName })),
+      ukjPending: ukjBlockedList
+        .filter((u) => u.halaqahId === g.id)
+        .map((u) => ({ studentId: u.studentId, fullName: u.fullName, juz: u.juz })),
+    }));
+
+    const inputCompleteness = {
+      upkWindow: { start: upkWindowStartStr, end: dateStr },
+      summary: {
+        dailyComplete: dailyCompleteness.filter((h) => h.status === "complete").length,
+        dailyPartial: dailyCompleteness.filter((h) => h.status === "partial").length,
+        dailyNone: dailyCompleteness.filter((h) => h.status === "none").length,
+        upkMissingStudents: examCompleteness.reduce((s, h) => s + h.upkMissing.length, 0),
+        ukjPendingStudents: ukjBlockedList.length,
+      },
+      daily: dailyCompleteness,
+      exam: examCompleteness,
+    };
+
+    // For the "Santri Aktif" drill-down on the dashboard
+    const activeStudents = groups
+      .flatMap((g) =>
+        g.members.map((m) => ({
+          studentId: m.studentId,
+          fullName: m.student?.fullName,
+          halaqahName: g.name,
+        })),
+      )
+      .sort((a, b) => String(a.fullName).localeCompare(String(b.fullName)));
 
     // 10. 30-day submission trend
     const trendRows = activeStudentIds.length
@@ -1634,6 +1734,8 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         atRisk: atRisk.slice(0, 20),
         halaqahSummary,
         ukjBlocked: { count: ukjBlockedList.length, list: ukjBlockedList },
+        inputCompleteness,
+        activeStudents,
         weeklyTrend,
         leaderboard,
       },
