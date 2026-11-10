@@ -1,13 +1,15 @@
 import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Context } from "hono";
 import { db } from "../db";
-import { teachers, students } from "../db/schema";
+import { teachers, students, users } from "../db/schema";
 import { clinicPatients } from "../db/schema/clinic";
+import { halaqahMembers, halaqahMentors } from "../db/schema/halaqah";
 
 export type GenderScope = "male" | "female" | null;
 
 // Guru (role "teacher") may only see santri of their own gender. Admin and
-// every other role are unrestricted (null = no restriction).
+// every other role are unrestricted (null = no restriction). Gender comes
+// from the linked teacher record, falling back to the user account.
 export async function getStudentGenderScope(
   userId: number,
   role: string,
@@ -16,8 +18,11 @@ export async function getStudentGenderScope(
   const teacher = await db.query.teachers.findFirst({
     where: eq(teachers.userId, userId),
   });
-  if (!teacher || !teacher.gender) return null;
-  const g = String(teacher.gender).toLowerCase();
+  const gender =
+    teacher?.gender ||
+    (await db.query.users.findFirst({ where: eq(users.id, userId) }))?.gender;
+  if (!gender) return null;
+  const g = String(gender).toLowerCase();
   if (g === "male" || g === "l" || g === "laki-laki" || g === "ikhwan") return "male";
   if (g === "female" || g === "p" || g === "perempuan" || g === "akhwat") return "female";
   return null;
@@ -79,6 +84,50 @@ export async function requireStudentGenderAccess(
 
   if (isStudentGenderAllowed(gender, scope)) return null;
   return c.json({ success: false, message: "Forbidden" }, 403);
+}
+
+// Halaqah visibility for a gender-scoped guru (null = unrestricted).
+// - Halaqah the guru mentors keep their full roster: that membership is an
+//   administrative assignment (see the 2026-09-20 VPS roster fix).
+// - Elsewhere only same-gender santri are shown, and a halaqah whose santri
+//   are all of the opposite gender is hidden entirely. Empty halaqah stay
+//   visible (nothing to leak, and PJ may still be filling them).
+export async function getHalaqahGenderAccess(userId: number, role: string) {
+  const scope = await getStudentGenderScope(userId, role);
+  if (!scope) return null;
+
+  const teacher = await db.query.teachers.findFirst({
+    where: eq(teachers.userId, userId),
+  });
+  const mentored = new Set(
+    teacher
+      ? (
+          await db
+            .select({ id: halaqahMentors.halaqahId })
+            .from(halaqahMentors)
+            .where(eq(halaqahMentors.teacherId, teacher.id))
+        ).map((r) => r.id)
+      : [],
+  );
+  const memberships = await db
+    .select({ halaqahId: halaqahMembers.halaqahId, gender: students.gender })
+    .from(halaqahMembers)
+    .innerJoin(students, eq(halaqahMembers.studentId, students.id));
+  const withMembers = new Set<number>();
+  const withAllowed = new Set<number>();
+  for (const m of memberships) {
+    withMembers.add(m.halaqahId);
+    if (isStudentGenderAllowed(m.gender, scope)) withAllowed.add(m.halaqahId);
+  }
+
+  return {
+    canSeeHalaqah: (halaqahId: number) =>
+      mentored.has(halaqahId) ||
+      withAllowed.has(halaqahId) ||
+      !withMembers.has(halaqahId),
+    canSeeMember: (halaqahId: number, studentGender: string | null | undefined) =>
+      mentored.has(halaqahId) || isStudentGenderAllowed(studentGender, scope),
+  };
 }
 
 // clinicPatients.gender uses "L"/"P" instead of "male"/"female".

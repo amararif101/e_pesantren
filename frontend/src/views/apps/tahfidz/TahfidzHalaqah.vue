@@ -453,9 +453,9 @@
                     <button
                       v-if="item.juzBlock?.blocked"
                       type="button"
-                      @click.stop="showJuzBlockNotice(item)"
+                      @click.stop="openExamInput(item, 'UKJ', item.juzBlock.completedJuz)"
                       class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700"
-                      title="Belum bisa Taqdim - perlu UKJ dulu"
+                      title="Belum bisa Taqdim - klik untuk input UKJ"
                     >
                       ⚠ Perlu UKJ Juz {{ item.juzBlock.completedJuz }}
                     </button>
@@ -483,6 +483,14 @@
                       :class="sabqiManzilPillClass(item, 'manzil')"
                     >
                       {{ pillLabel(item, "manzil") }}
+                    </button>
+                    <button
+                      type="button"
+                      @click.stop="openExamInput(item, 'UPK')"
+                      class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#602515]/10 text-[#602515]"
+                      title="Input nilai UPK santri ini"
+                    >
+                      UPK
                     </button>
                   </div>
                 </div>
@@ -1098,6 +1106,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import { useRouter } from "vue-router";
 import StatCard from "@/components/ui/StatCard.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import StatusModal from "@/components/ui/StatusModal.vue";
@@ -1341,11 +1350,14 @@ function pillLabel(item, type) {
   return deposit ? `${label}: ${deposit.isCompleted ? "Sudah" : "Belum"}` : label;
 }
 
-function showJuzBlockNotice(item) {
-  statusModalType.value = "failed";
-  statusModalTitle.value = "Perlu Ujian Kenaikan Juz (UKJ)";
-  statusModalMessage.value = `${item.student.name} sudah menyelesaikan Juz ${item.juzBlock.completedJuz}. Santri ini harus mengikuti dan lulus UKJ untuk Juz ${item.juzBlock.completedJuz} sebelum bisa melanjutkan setoran Taqdim.`;
-  showStatusModal.value = true;
+// Open the exam form on the Ujian page already filled for this santri
+// (UPK pill, or UKJ for the juz a blocked santri just finished).
+const router = useRouter();
+function openExamInput(item, category, juz) {
+  router.push({
+    path: "/apps/tahfidz/exams",
+    query: { examStudentId: item.student.id, category, juz },
+  });
 }
 
 function getStatusText(status) {
@@ -1731,7 +1743,7 @@ async function openModal(item, bulk = false, presetType = null) {
   // Taqdim is blocked once the student has finished a juz until they pass
   // the UKJ exam for it (also enforced server-side).
   if (!bulk && presetType === "ziyadah" && item?.juzBlock?.blocked) {
-    showJuzBlockNotice(item);
+    openExamInput(item, "UKJ", item.juzBlock.completedJuz);
     return;
   }
 

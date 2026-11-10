@@ -1861,6 +1861,18 @@ export const tahfidzApi = {
     const query = new URLSearchParams(params).toString();
     return request(`/api/tahfidz/sertifikasi-report?${query}`);
   },
+  async getExamRecap(params) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/exam-recap?${query}`);
+  },
+  async getClassReport(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/class-report?${query}`);
+  },
+  async getRecapTrend(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return request(`/api/tahfidz/recap-trend?${query}`);
+  },
   // Target Settings
   async getTargets() {
     return request("/api/tahfidz/targets");

@@ -25,6 +25,7 @@ import {
 } from "../db/schema";
 import {
   getStudentGenderScope,
+  getHalaqahGenderAccess,
   getAllowedStudentIds,
   requireStudentGenderAccess,
 } from "../utils/gender-scope";
@@ -43,7 +44,7 @@ import {
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getJuzFromPage, getJuzFromSurah } from "../utils/quran-mapping";
-import { checkJuzCompletionBlock, safeCheckJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
+import { checkJuzCompletionBlock, checkJuzTransition, safeCheckJuzCompletionBlock, getJuzIfCompleted } from "../utils/juz-progress";
 import {
   canBackdateTahfidzDeposit,
   hasDirectBackdateRole,
@@ -109,6 +110,10 @@ const depositSchema = z.object({
   depositDate: z.string().optional(),
 });
 
+const score = z.number().min(0, "Nilai tidak boleh negatif").max(100, "Nilai maksimal 100");
+// Max per Nilai 1-9 / Tajwid for each scored category (matches the form).
+const NILAI_MAX: Record<string, number> = { UPK: 15, UKJ: 15, UA: 10 };
+
 const examSchema = z.object({
   studentId: z.number(),
   examinerId: z.number(),
@@ -124,29 +129,42 @@ const examSchema = z.object({
   juz: z.number().nullable().optional(),
   startPage: z.number().nullable().optional(),
   endPage: z.number().nullable().optional(),
-  scoreFluency: z.number().optional(),
-  scoreTajwid: z.number().optional(),
-  scoreMakhraj: z.number().optional(),
-  scoreAdab: z.number().optional(),
-  // UPK & UKJ & UA
-  nilai1: z.number().nullable().optional(),
-  nilai2: z.number().nullable().optional(),
-  nilai3: z.number().nullable().optional(),
-  nilai4: z.number().nullable().optional(),
-  nilai5: z.number().nullable().optional(),
-  nilai6: z.number().nullable().optional(),
-  nilai7: z.number().nullable().optional(),
-  nilai8: z.number().nullable().optional(),
-  nilai9: z.number().nullable().optional(),
+  scoreFluency: score.optional(),
+  scoreTajwid: score.optional(),
+  scoreMakhraj: score.optional(),
+  scoreAdab: score.optional(),
+  // UPK & UKJ & UA (per-category max checked below)
+  nilai1: score.nullable().optional(),
+  nilai2: score.nullable().optional(),
+  nilai3: score.nullable().optional(),
+  nilai4: score.nullable().optional(),
+  nilai5: score.nullable().optional(),
+  nilai6: score.nullable().optional(),
+  nilai7: score.nullable().optional(),
+  nilai8: score.nullable().optional(),
+  nilai9: score.nullable().optional(),
   // UPK & UA
   capaianTargetPages: z.number().nullable().optional(),
   capaianTargetScore: z.number().nullable().optional(),
   // Jilsah & Sertifikasi
   khotoJaliCount: z.number().nullable().optional(),
   khotoKhofiCount: z.number().nullable().optional(),
-  finalScore: z.number(),
-  verdict: z.enum(["pass", "fail", "conditional"]),
+  finalScore: score,
+  // Not used for UPK, UKJ & UA (no pass/fail concept)
+  verdict: z.enum(["pass", "fail", "conditional"]).nullable().optional(),
   notes: z.string().optional(),
+}).superRefine((d, ctx) => {
+  const max = NILAI_MAX[d.examCategory ?? ""];
+  if (!max) return;
+  for (let i = 1; i <= 9; i++) {
+    const v = d[`nilai${i}` as `nilai${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`];
+    if (v != null && v > max) {
+      ctx.addIssue({ code: "custom", path: [`nilai${i}`], message: `Nilai ${i} maksimal ${max}` });
+    }
+  }
+  if (d.examCategory !== "UA" && (d.scoreTajwid ?? 0) > 10) {
+    ctx.addIssue({ code: "custom", path: ["scoreTajwid"], message: "Tajwid maksimal 10" });
+  }
 });
 
 const reportCardPublishSchema = z.object({
@@ -301,7 +319,7 @@ app.get("/deposits", async (c) => {
         ),
       )
       .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
-      .orderBy(desc(tahfidzDeposits.depositDate));
+      .orderBy(desc(tahfidzDeposits.depositDate), asc(students.fullName));
 
     const page = Number(c.req.query("page") || 1);
     const limit = Number(c.req.query("limit") || 10);
@@ -433,6 +451,13 @@ app.post("/deposits", zValidator("json", depositSchema), async (c) => {
           400,
         );
       }
+      const transitionError = await checkJuzTransition(body.studentId, {
+        ...body,
+        depositDate,
+      });
+      if (transitionError) {
+        return c.json({ success: false, message: transitionError }, 400);
+      }
     }
 
     await db.insert(tahfidzDeposits).values({
@@ -542,6 +567,17 @@ app.put("/deposits/:id", zValidator("json", depositSchema), async (c) => {
       depositDate,
       "mengubah setoran tahfidz",
     );
+
+    if (body.type === "ziyadah") {
+      const transitionError = await checkJuzTransition(
+        body.studentId,
+        { ...body, depositDate },
+        id,
+      );
+      if (transitionError) {
+        return c.json({ success: false, message: transitionError }, 400);
+      }
+    }
 
     await db
       .update(tahfidzDeposits)
@@ -989,13 +1025,17 @@ app.get("/capaian-target/:studentId", async (c) => {
       }
     }
 
-    if (!target) target = allTargets[0] || ({ targetPages: 50, level: "Default" } as any);
+    const levelTarget: { targetPages: number; targetPagesPerWeek?: number | null } =
+      target || allTargets[0] || { targetPages: 50 };
 
-    const baseTargetPages = target.targetPages || 50;
+    const baseTargetPages = levelTarget.targetPages || 50;
     const examDate = new Date(examDateStr);
 
+    const UPK_WINDOW_WEEKS = 2;
     let targetPages: number;
     let startWindow: Date;
+    let weeklyTarget: number | null = null;
+    let weeklyTargetDerived = false;
 
     if (category === "UA") {
       // UA: window 1 semester berjalan (Jul-Des atau Jan-Jun) s.d. examDate,
@@ -1006,14 +1046,25 @@ app.get("/capaian-target/:studentId", async (c) => {
         : new Date(examDate.getFullYear(), 6, 1);
       targetPages = baseTargetPages * 6;
     } else {
-      // UPK: window 14 hari terakhir s.d. examDate
+      // UPK: window 2 pekan (14 hari) s.d. examDate. Target = target per
+      // pekan level kelompok tahfidz x 2 pekan; bila target pekanan belum
+      // diisi, diturunkan dari target bulanan (bulanan / 4).
       startWindow = new Date(examDate);
       startWindow.setDate(startWindow.getDate() - 13);
-      targetPages = baseTargetPages;
+      weeklyTarget =
+        levelTarget.targetPagesPerWeek ||
+        Math.max(1, Math.ceil(baseTargetPages / 4));
+      weeklyTargetDerived = !levelTarget.targetPagesPerWeek;
+      targetPages = weeklyTarget * UPK_WINDOW_WEEKS;
     }
 
     const recentDeposits = await db
-      .select({ totalPages: tahfidzDeposits.totalPages })
+      .select({
+        depositDate: tahfidzDeposits.depositDate,
+        totalPages: tahfidzDeposits.totalPages,
+        startPage: tahfidzDeposits.startPage,
+        endPage: tahfidzDeposits.endPage,
+      })
       .from(tahfidzDeposits)
       .where(
         and(
@@ -1022,12 +1073,23 @@ app.get("/capaian-target/:studentId", async (c) => {
           sql`DATE(${tahfidzDeposits.depositDate}) >= ${startWindow.toISOString().split("T")[0]}`,
           sql`DATE(${tahfidzDeposits.depositDate}) <= ${examDateStr}`,
         ),
-      );
+      )
+      .orderBy(asc(tahfidzDeposits.depositDate), asc(tahfidzDeposits.id));
 
     const achievedPages = recentDeposits.reduce(
       (sum, d) => sum + (Number(d.totalPages) || 0),
       0,
     );
+
+    // Hal. Awal / Hal. Akhir recap from the daily input: first page of the
+    // earliest Taqdim and last page of the latest one in the window.
+    const withPages = recentDeposits.filter(
+      (d) => d.startPage != null && d.endPage != null,
+    );
+    const startPage = withPages.length ? withPages[0]!.startPage : null;
+    const endPage = withPages.length
+      ? withPages[withPages.length - 1]!.endPage
+      : null;
 
     const capaianTargetScore = Math.round(
       Math.min(achievedPages / targetPages, 1) * maxScore * 100,
@@ -1039,6 +1101,14 @@ app.get("/capaian-target/:studentId", async (c) => {
         achievedPages,
         targetPages,
         capaianTargetScore,
+        // UPK weekly-target details + daily input recap (null/absent for UA)
+        weeklyTarget,
+        weeklyTargetDerived,
+        windowStart: startWindow.toISOString().split("T")[0],
+        windowEnd: examDateStr,
+        depositCount: recentDeposits.length,
+        startPage,
+        endPage,
       },
     });
   } catch (e: any) {
@@ -1106,8 +1176,17 @@ app.get("/halaqah/:groupId/daily-summary", async (c) => {
       return c.json({ success: true, data: [] });
     }
 
-    // Filter members: ensure student record exists
-    const validMembers = members.filter((m) => m.student != null);
+    // Filter members: ensure student record exists, hide opposite-gender
+    // santri from a guru outside their own halaqah, list alphabetically
+    const user = c.get("user");
+    const access = await getHalaqahGenderAccess(user.userId, user.role);
+    const validMembers = members
+      .filter(
+        (m) =>
+          m.student != null &&
+          (!access || access.canSeeMember(groupId, m.student.gender)),
+      )
+      .sort((a, b) => a.student.fullName.localeCompare(b.student.fullName, "id"));
 
     if (!validMembers.length) {
       return c.json({ success: true, data: [] });
@@ -1324,11 +1403,20 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
     let manzilMissing = 0;
     let excusedCount = 0;
     const perHalaqahSubmission = [];
+    // Per-halaqah input completeness for today (who the musyrif still has to
+    // input, and which of Taqdim/Sabqi/Manzil is missing)
+    const dailyCompleteness: any[] = [];
 
     groups.forEach((g) => {
       let hZiyadahMissing = 0;
       let hSabqiMissing = 0;
       let hManzilMissing = 0;
+      let hExcused = 0;
+      const missingStudents: {
+        studentId: number;
+        fullName: string | undefined;
+        missingTypes: string[];
+      }[] = [];
       g.members.forEach((m) => {
         const studentDeposits = depositsByStudent.get(m.studentId) || [];
         const exception = studentDeposits.find((d) =>
@@ -1342,12 +1430,21 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         }
         if (exception) {
           excusedCount++;
+          hExcused++;
           return; // excused students are not counted as "belum setor"
         }
         const hasType = (t) => studentDeposits.some((d) => d.type === t);
-        if (!hasType("ziyadah")) { ziyadahMissing++; hZiyadahMissing++; }
-        if (!hasType("sabqi")) { sabqiMissing++; hSabqiMissing++; }
-        if (!hasType("manzil")) { manzilMissing++; hManzilMissing++; }
+        const missingTypes: string[] = [];
+        if (!hasType("ziyadah")) { ziyadahMissing++; hZiyadahMissing++; missingTypes.push("ziyadah"); }
+        if (!hasType("sabqi")) { sabqiMissing++; hSabqiMissing++; missingTypes.push("sabqi"); }
+        if (!hasType("manzil")) { manzilMissing++; hManzilMissing++; missingTypes.push("manzil"); }
+        if (missingTypes.length) {
+          missingStudents.push({
+            studentId: m.studentId,
+            fullName: m.student?.fullName,
+            missingTypes,
+          });
+        }
       });
       perHalaqahSubmission.push({
         halaqahId: g.id,
@@ -1355,6 +1452,29 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         ziyadahMissing: hZiyadahMissing,
         sabqiMissing: hSabqiMissing,
         manzilMissing: hManzilMissing,
+      });
+
+      const expected = g.members.length - hExcused;
+      const noInputCount = missingStudents.filter((s) => s.missingTypes.length === 3).length;
+      dailyCompleteness.push({
+        halaqahId: g.id,
+        halaqahName: g.name,
+        mentors: g.mentors.map((mt) => mt.teacher?.fullName || "-"),
+        totalStudents: g.members.length,
+        expectedStudents: expected,
+        noInputCount,
+        partialCount: missingStudents.length - noInputCount,
+        // none: nobody inputted yet | partial: some Taqdim/Sabqi/Manzil
+        // missing | complete: everything inputted | excused: nobody expected
+        status:
+          expected === 0
+            ? "excused"
+            : noInputCount === expected
+              ? "none"
+              : missingStudents.length
+                ? "partial"
+                : "complete",
+        missingStudents,
       });
     });
 
@@ -1503,6 +1623,7 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         g.members.map(async (m) => ({
           studentId: m.studentId,
           fullName: m.student?.fullName,
+          halaqahId: g.id,
           halaqahName: g.name,
           block: await safeCheckJuzCompletionBlock(m.studentId),
         })),
@@ -1513,9 +1634,67 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
       .map((r) => ({
         studentId: r.studentId,
         fullName: r.fullName,
+        halaqahId: r.halaqahId,
         halaqahName: r.halaqahName,
         juz: r.block.completedJuz,
       }));
+
+    // 9b. Exam input completeness per halaqah: santri with no UPK in the
+    // 2-week window ending on the selected date, and santri who finished a
+    // juz but whose UKJ has not been inputted yet (= the UKJ-blocked list).
+    const upkWindowStart = new Date(targetDate);
+    upkWindowStart.setDate(upkWindowStart.getDate() - 13);
+    const upkWindowStartStr = upkWindowStart.toISOString().split("T")[0];
+    const upkRows = activeStudentIds.length
+      ? await db
+          .select({ studentId: tahfidzExams.studentId })
+          .from(tahfidzExams)
+          .where(
+            and(
+              inArray(tahfidzExams.studentId, activeStudentIds),
+              eq(tahfidzExams.examCategory, "UPK"),
+              sql`${tahfidzExams.examDate} >= ${upkWindowStartStr}`,
+              sql`${tahfidzExams.examDate} <= ${dateStr}`,
+            ),
+          )
+      : [];
+    const studentsWithUpk = new Set(upkRows.map((r) => r.studentId));
+    const examCompleteness = groups.map((g) => ({
+      halaqahId: g.id,
+      halaqahName: g.name,
+      mentors: g.mentors.map((mt) => mt.teacher?.fullName || "-"),
+      totalStudents: g.members.length,
+      upkMissing: g.members
+        .filter((m) => !studentsWithUpk.has(m.studentId))
+        .map((m) => ({ studentId: m.studentId, fullName: m.student?.fullName })),
+      ukjPending: ukjBlockedList
+        .filter((u) => u.halaqahId === g.id)
+        .map((u) => ({ studentId: u.studentId, fullName: u.fullName, juz: u.juz })),
+    }));
+
+    const inputCompleteness = {
+      upkWindow: { start: upkWindowStartStr, end: dateStr },
+      summary: {
+        dailyComplete: dailyCompleteness.filter((h) => h.status === "complete").length,
+        dailyPartial: dailyCompleteness.filter((h) => h.status === "partial").length,
+        dailyNone: dailyCompleteness.filter((h) => h.status === "none").length,
+        upkMissingStudents: examCompleteness.reduce((s, h) => s + h.upkMissing.length, 0),
+        ukjPendingStudents: ukjBlockedList.length,
+      },
+      daily: dailyCompleteness,
+      exam: examCompleteness,
+    };
+
+    // For the "Santri Aktif" drill-down on the dashboard
+    const activeStudents = groups
+      .flatMap((g) =>
+        g.members.map((m) => ({
+          studentId: m.studentId,
+          fullName: m.student?.fullName,
+          halaqahName: g.name,
+        })),
+      )
+      .sort((a, b) => String(a.fullName).localeCompare(String(b.fullName)));
 
     // 10. 30-day submission trend
     const trendRows = activeStudentIds.length
@@ -1599,6 +1778,8 @@ app.get("/monitoring-dashboard", requirePermission("/apps/tahfidz/monitoring"), 
         atRisk: atRisk.slice(0, 20),
         halaqahSummary,
         ukjBlocked: { count: ukjBlockedList.length, list: ukjBlockedList },
+        inputCompleteness,
+        activeStudents,
         weeklyTrend,
         leaderboard,
       },
@@ -2193,6 +2374,506 @@ app.get("/halaqah/:groupId/health-summary", async (c) => {
   }
 });
 
+// Pages of one Taqdim deposit; legacy deposits only have pageNumber and
+// count as one page.
+const pagesExpr = sql`COALESCE(${tahfidzDeposits.totalPages}, CASE WHEN ${tahfidzDeposits.pageNumber} IS NOT NULL THEN 1 ELSE 0 END)`;
+
+// --- CLASS HAFALAN REPORT ---
+// GET /class-report - Mading hafalan grouped per kelas (not per halaqah): every
+// active santri with pages memorised in the period vs target, cumulative
+// total pages / juz and the last Taqdim position.
+app.get("/class-report", async (c) => {
+  const classId = c.req.query("classId");
+  const gender = c.req.query("gender");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const startDate =
+    c.req.query("startDate") || `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+  const endDate =
+    c.req.query("endDate") ||
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDay)}`;
+
+  try {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+    if (allowedIds && !allowedIds.length) {
+      return c.json({
+        success: true,
+        data: { period: { startDate, endDate }, summary: null, classes: [] },
+      });
+    }
+
+    const conditions: any[] = [eq(students.status, "active")];
+    if (allowedIds) conditions.push(inArray(students.id, allowedIds));
+    else if (gender) conditions.push(eq(students.gender, gender as "male" | "female"));
+    if (classId) conditions.push(eq(students.classId, Number(classId)));
+
+    const roster = await db
+      .select({
+        id: students.id,
+        nis: students.nis,
+        fullName: students.fullName,
+        classId: students.classId,
+        className: classes.name,
+        halaqahName: halaqahGroups.name,
+        levelTargetPages: tahfidzTargets.targetPages,
+      })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(
+        halaqahMembers,
+        and(
+          eq(halaqahMembers.studentId, students.id),
+          eq(halaqahMembers.status, "active"),
+        ),
+      )
+      .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
+      .leftJoin(tahfidzTargets, eq(halaqahGroups.targetLevelId, tahfidzTargets.id))
+      .where(and(...conditions))
+      .orderBy(asc(classes.name), asc(students.fullName));
+
+    const seen = new Set<number>();
+    const people = roster.filter((s) =>
+      seen.has(s.id) ? false : (seen.add(s.id), true),
+    );
+    const ids = people.map((s) => s.id);
+
+    const defaultTarget = (await db.select().from(tahfidzTargets))[0]?.targetPages || 6;
+
+    const sumPages = async (extra: any[] = []) => {
+      const rows = ids.length
+        ? await db
+            .select({
+              studentId: tahfidzDeposits.studentId,
+              pages: sql<string>`sum(${pagesExpr})`,
+            })
+            .from(tahfidzDeposits)
+            .where(
+              and(
+                eq(tahfidzDeposits.type, "ziyadah"),
+                inArray(tahfidzDeposits.studentId, ids),
+                ...extra,
+              ),
+            )
+            .groupBy(tahfidzDeposits.studentId)
+        : [];
+      return new Map(rows.map((r) => [r.studentId, Number(r.pages) || 0]));
+    };
+
+    const periodPages = await sumPages([
+      sql`${tahfidzDeposits.depositDate} >= ${`${startDate} 00:00:00`}`,
+      sql`${tahfidzDeposits.depositDate} <= ${`${endDate} 23:59:59`}`,
+    ]);
+    const totalPages = await sumPages();
+
+    // Last Taqdim per santri (latest date, then latest id)
+    const lastRows = ids.length
+      ? await db
+          .select({
+            studentId: tahfidzDeposits.studentId,
+            endSurah: tahfidzDeposits.endSurah,
+            endAyat: tahfidzDeposits.endAyat,
+            endPage: tahfidzDeposits.endPage,
+            pageNumber: tahfidzDeposits.pageNumber,
+            juz: tahfidzDeposits.juz,
+            depositDate: tahfidzDeposits.depositDate,
+          })
+          .from(tahfidzDeposits)
+          .where(
+            and(
+              eq(tahfidzDeposits.type, "ziyadah"),
+              inArray(tahfidzDeposits.studentId, ids),
+              sql`${tahfidzDeposits.id} = (SELECT d2.id FROM tahfidz_deposits d2 WHERE d2.student_id = ${tahfidzDeposits.studentId} AND d2.type = 'ziyadah' ORDER BY d2.deposit_date DESC, d2.id DESC LIMIT 1)`,
+            ),
+          )
+      : [];
+    const lastByStudent = new Map(lastRows.map((r) => [r.studentId, r]));
+
+    // Target scales with the length of the period (target is per month)
+    const days =
+      (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000 + 1;
+    const months = Math.max(1, Math.round(days / 30));
+
+    const byClass = new Map<string, any>();
+    for (const s of people) {
+      const targetPages = (s.levelTargetPages || defaultTarget) * months;
+      const pages = Math.round((periodPages.get(s.id) || 0) * 100) / 100;
+      const total = Math.round((totalPages.get(s.id) || 0) * 100) / 100;
+      const last = lastByStudent.get(s.id);
+      const lastPage = last ? last.endPage ?? last.pageNumber : null;
+
+      const key = String(s.classId ?? "none");
+      if (!byClass.has(key)) {
+        byClass.set(key, {
+          classId: s.classId,
+          className: s.className || "Tanpa Kelas",
+          students: [],
+        });
+      }
+      byClass.get(key).students.push({
+        studentId: s.id,
+        nis: s.nis,
+        fullName: s.fullName,
+        halaqahName: s.halaqahName || null,
+        periodPages: pages,
+        targetPages,
+        status: pages > targetPages ? "MT" : pages === targetPages ? "ST" : "DT",
+        totalPages: total,
+        totalJuz: Math.round((total / 20) * 100) / 100, // 1 juz = 20 halaman
+        lastPosition: last
+          ? {
+              surah: last.endSurah,
+              ayat: last.endAyat,
+              page: lastPage,
+              juz: last.juz ?? (lastPage ? getJuzFromPage(lastPage) : null),
+              date: new Date(last.depositDate).toISOString().split("T")[0],
+            }
+          : null,
+      });
+    }
+
+    // Santri without a class go last
+    const classList = [...byClass.values()].sort(
+      (a, b) => Number(a.classId == null) - Number(b.classId == null),
+    );
+    const all = classList.flatMap((k) => k.students);
+    return c.json({
+      success: true,
+      data: {
+        period: { startDate, endDate, months },
+        summary: {
+          totalStudents: all.length,
+          achieved: all.filter((s) => s.status !== "DT").length,
+          below: all.filter((s) => s.status === "DT").length,
+          totalPeriodPages:
+            Math.round(all.reduce((sum, s) => sum + s.periodPages, 0) * 100) / 100,
+        },
+        classes: classList,
+      },
+    });
+  } catch (e: any) {
+    console.error("Class report error:", e);
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
+// --- RECAP & MADING TREND ---
+// GET /recap-trend?endDate=YYYY-MM-DD - 24-month trend behind
+// the Rekap & Mading cards on the monitoring dashboard: exam count / average
+// per category, Taqdim pages and the share of santri reaching their monthly
+// level target. 24 months lets a 1-year card compare with the year before.
+// ponytail: uses today's active roster for past months too; switch to
+// historical membership if santri often move between kelas/halaqah.
+app.get("/recap-trend", requirePermission("/apps/tahfidz/monitoring"), async (c) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const end = new Date(c.req.query("endDate") || Date.now());
+  const count = 24;
+  const months = Array.from({ length: count }, (_, i) => {
+    const d = new Date(end.getFullYear(), end.getMonth() - (count - 1 - i), 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  });
+  const [ly, lm] = months[count - 1]!.split("-").map(Number);
+  const rangeStart = `${months[0]}-01`;
+  const rangeEnd = `${months[count - 1]}-${pad(new Date(ly!, lm!, 0).getDate())}`;
+  const zero = () => months.map(() => 0);
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const pct = (n: number, of: number) => (of ? round2((n / of) * 100) : 0);
+
+  try {
+    const user = c.get("user");
+    const allowedIds = await getAllowedStudentIds(
+      await getStudentGenderScope(user.userId, user.role),
+    );
+    const conditions: any[] = [eq(students.status, "active")];
+    if (allowedIds) {
+      conditions.push(inArray(students.id, allowedIds.length ? allowedIds : [0]));
+    }
+
+    const roster = await db
+      .select({ id: students.id, levelTargetPages: tahfidzTargets.targetPages })
+      .from(students)
+      .leftJoin(
+        halaqahMembers,
+        and(
+          eq(halaqahMembers.studentId, students.id),
+          eq(halaqahMembers.status, "active"),
+        ),
+      )
+      .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
+      .leftJoin(tahfidzTargets, eq(halaqahGroups.targetLevelId, tahfidzTargets.id))
+      .where(and(...conditions));
+    const seen = new Set<number>();
+    const people = roster.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
+    const ids = people.length ? people.map((s) => s.id) : [0];
+    const defaultTarget = (await db.select().from(tahfidzTargets))[0]?.targetPages || 6;
+
+    const ym = (col: any) => sql<string>`DATE_FORMAT(${col}, '%Y-%m')`;
+    const depositRows = await db
+      .select({
+        studentId: tahfidzDeposits.studentId,
+        month: ym(tahfidzDeposits.depositDate).as("month"),
+        pages: sql<string>`sum(${pagesExpr})`,
+      })
+      .from(tahfidzDeposits)
+      .where(
+        and(
+          eq(tahfidzDeposits.type, "ziyadah"),
+          inArray(tahfidzDeposits.studentId, ids),
+          sql`${tahfidzDeposits.depositDate} >= ${`${rangeStart} 00:00:00`}`,
+          sql`${tahfidzDeposits.depositDate} <= ${`${rangeEnd} 23:59:59`}`,
+        ),
+      )
+      .groupBy(tahfidzDeposits.studentId, sql`month`);
+    const pagesBy = new Map(
+      depositRows.map((r) => [`${r.studentId}|${r.month}`, Number(r.pages) || 0]),
+    );
+
+    // Taqdim pages and monthly target achievement
+    const totalPages = zero();
+    const achieved = zero();
+    for (const s of people) {
+      const target = s.levelTargetPages || defaultTarget;
+      months.forEach((m, i) => {
+        const p = pagesBy.get(`${s.id}|${m}`) || 0;
+        totalPages[i]! += p;
+        if (p >= target) achieved[i]!++;
+      });
+    }
+
+    // Exams per category per month
+    const CATEGORIES = ["UKJ", "UPK", "UA", "Sertifikasi"] as const;
+    const examRows = await db
+      .select({
+        category: tahfidzExams.examCategory,
+        month: ym(tahfidzExams.examDate).as("month"),
+        count: sql<number>`count(*)`,
+        avg: sql<string>`avg(${tahfidzExams.finalScore})`,
+      })
+      .from(tahfidzExams)
+      .where(
+        and(
+          inArray(tahfidzExams.studentId, ids),
+          inArray(tahfidzExams.examCategory, [...CATEGORIES]),
+          sql`${tahfidzExams.examDate} >= ${rangeStart}`,
+          sql`${tahfidzExams.examDate} <= ${rangeEnd}`,
+        ),
+      )
+      .groupBy(tahfidzExams.examCategory, sql`month`);
+    const exams = Object.fromEntries(
+      CATEGORIES.map((cat) => [
+        cat,
+        months.map((m) => {
+          const r = examRows.find((r) => r.category === cat && r.month === m);
+          return { count: Number(r?.count ?? 0), avgScore: r ? round2(Number(r.avg)) : null };
+        }),
+      ]),
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        months,
+        exams,
+        hafalan: {
+          totalPages: totalPages.map(round2),
+          achievedPct: achieved.map((n) => pct(n, people.length)),
+        },
+      },
+    });
+  } catch (e: any) {
+    console.error("Recap trend error:", e);
+    return c.json({ success: false, message: e.message || "Internal Error" }, 500);
+  }
+});
+
+// --- EXAM RECAP ---
+// GET /exam-recap?category=UKJ|UPK|UA - one row per active santri (including
+// those with no exam yet) summarising their exams of that category in the
+// optional date range. Used by the "Rekap Ujian" page.
+app.get("/exam-recap", async (c) => {
+  const category = c.req.query("category") as "UKJ" | "UPK" | "UA" | undefined;
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
+  const classId = c.req.query("classId");
+  const halaqahId = c.req.query("halaqahId");
+  const gender = c.req.query("gender");
+
+  if (!category || !["UKJ", "UPK", "UA"].includes(category)) {
+    return c.json(
+      { success: false, message: "category harus UKJ, UPK, atau UA" },
+      400,
+    );
+  }
+
+  try {
+    const user = c.get("user");
+    const genderScope = await getStudentGenderScope(user.userId, user.role);
+    const allowedIds = await getAllowedStudentIds(genderScope);
+
+    const conditions: any[] = [eq(students.status, "active")];
+    if (allowedIds) {
+      if (!allowedIds.length) {
+        return c.json({ success: true, data: { summary: null, rows: [] } });
+      }
+      conditions.push(inArray(students.id, allowedIds));
+    } else if (gender) {
+      conditions.push(eq(students.gender, gender as "male" | "female"));
+    }
+    if (classId) conditions.push(eq(students.classId, Number(classId)));
+    if (halaqahId) conditions.push(eq(halaqahMembers.halaqahId, Number(halaqahId)));
+
+    const studentRows = await db
+      .select({
+        id: students.id,
+        nis: students.nis,
+        fullName: students.fullName,
+        gender: students.gender,
+        className: classes.name,
+        halaqahName: halaqahGroups.name,
+      })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(
+        halaqahMembers,
+        and(
+          eq(halaqahMembers.studentId, students.id),
+          eq(halaqahMembers.status, "active"),
+        ),
+      )
+      .leftJoin(halaqahGroups, eq(halaqahMembers.halaqahId, halaqahGroups.id))
+      .where(and(...conditions))
+      .orderBy(asc(classes.name), asc(students.fullName));
+
+    // A student could appear twice if enrolled in two active halaqah
+    const seen = new Set<number>();
+    const roster = studentRows.filter((s) =>
+      seen.has(s.id) ? false : (seen.add(s.id), true),
+    );
+
+    const examConditions: any[] = [eq(tahfidzExams.examCategory, category)];
+    if (roster.length) {
+      examConditions.push(
+        inArray(
+          tahfidzExams.studentId,
+          roster.map((s) => s.id),
+        ),
+      );
+    }
+    if (startDate) examConditions.push(sql`${tahfidzExams.examDate} >= ${startDate}`);
+    if (endDate) examConditions.push(sql`${tahfidzExams.examDate} <= ${endDate}`);
+
+    const exams = roster.length
+      ? await db
+          .select({
+            studentId: tahfidzExams.studentId,
+            examDate: tahfidzExams.examDate,
+            juz: tahfidzExams.juz,
+            finalScore: tahfidzExams.finalScore,
+            capaianTargetPages: tahfidzExams.capaianTargetPages,
+            capaianTargetScore: tahfidzExams.capaianTargetScore,
+          })
+          .from(tahfidzExams)
+          .where(and(...examConditions))
+          .orderBy(asc(tahfidzExams.examDate), asc(tahfidzExams.id))
+      : [];
+
+    const examsByStudent = new Map<number, typeof exams>();
+    for (const e of exams) {
+      const list = examsByStudent.get(e.studentId) || [];
+      list.push(e);
+      examsByStudent.set(e.studentId, list);
+    }
+
+    // Capaian Target is scored out of 30 (UPK) / 10 (UA); anything below the
+    // max means the santri fell short of the target pages.
+    const capaianMax = category === "UPK" ? 30 : category === "UA" ? 10 : null;
+    const toDateStr = (d: any) => new Date(d).toISOString().split("T")[0];
+
+    const rows = roster.map((s) => {
+      const list = examsByStudent.get(s.id) || [];
+      const last = list[list.length - 1];
+      const totalScore = list.reduce((sum, e) => sum + Number(e.finalScore || 0), 0);
+      const belowTargetCount = capaianMax
+        ? list.filter(
+            (e) =>
+              e.capaianTargetScore != null &&
+              Number(e.capaianTargetScore) < capaianMax,
+          ).length
+        : 0;
+
+      return {
+        studentId: s.id,
+        nis: s.nis,
+        fullName: s.fullName,
+        gender: s.gender,
+        className: s.className || null,
+        halaqahName: s.halaqahName || null,
+        examCount: list.length,
+        totalScore,
+        avgScore: list.length ? Math.round((totalScore / list.length) * 100) / 100 : null,
+        lastDate: last ? toDateStr(last.examDate) : null,
+        lastScore: last ? Number(last.finalScore) : null,
+        lastCapaianPages: last?.capaianTargetPages ?? null,
+        lastCapaianScore:
+          last?.capaianTargetScore != null ? Number(last.capaianTargetScore) : null,
+        belowTargetCount,
+        belowTarget:
+          capaianMax != null &&
+          last?.capaianTargetScore != null &&
+          Number(last.capaianTargetScore) < capaianMax,
+        // UKJ: every juz this santri has taken UKJ for (latest attempt per juz)
+        juzList:
+          category === "UKJ"
+            ? [
+                ...new Map(
+                  list
+                    .filter((e) => e.juz != null)
+                    .map((e) => [
+                      e.juz as number,
+                      {
+                        juz: e.juz as number,
+                        date: toDateStr(e.examDate),
+                        score: Number(e.finalScore),
+                      },
+                    ]),
+                ).values(),
+              ].sort((a, b) => a.juz - b.juz)
+            : undefined,
+      };
+    });
+
+    const examined = rows.filter((r) => r.examCount > 0);
+    const allScores = exams.map((e) => Number(e.finalScore || 0));
+
+    return c.json({
+      success: true,
+      data: {
+        summary: {
+          totalStudents: rows.length,
+          examinedStudents: examined.length,
+          notExaminedStudents: rows.length - examined.length,
+          totalExams: exams.length,
+          avgScore: allScores.length
+            ? Math.round((allScores.reduce((a, b) => a + b, 0) / allScores.length) * 100) / 100
+            : null,
+          belowTargetStudents: rows.filter((r) => r.belowTarget).length,
+        },
+        rows,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      { success: false, message: e.message || "Internal Error" },
+      500,
+    );
+  }
+});
+
 // --- HALAQAH REPORT ---
 // GET /sertifikasi-report - Mading Sertifikasi: per-halaqah wall report of
 // each member's Sertifikasi exam status/date/score/verdict for a date range.
@@ -2217,6 +2898,14 @@ app.get("/sertifikasi-report", async (c) => {
 
     if (!halaqah) {
       return c.json({ success: false, message: "Halaqah not found" }, 404);
+    }
+
+    const access = await getHalaqahGenderAccess(
+      c.get("user").userId,
+      c.get("user").role,
+    );
+    if (access && !access.canSeeHalaqah(Number(halaqahId))) {
+      return c.json({ success: false, message: "Forbidden" }, 403);
     }
 
     const mentorRecord = await db
@@ -2334,6 +3023,14 @@ app.get("/halaqah-report", async (c) => {
 
     if (!halaqah) {
       return c.json({ success: false, message: "Halaqah not found" }, 404);
+    }
+
+    const access = await getHalaqahGenderAccess(
+      c.get("user").userId,
+      c.get("user").role,
+    );
+    if (access && !access.canSeeHalaqah(Number(halaqahId))) {
+      return c.json({ success: false, message: "Forbidden" }, 403);
     }
 
     // 2. Get first mentor
@@ -2497,6 +3194,7 @@ app.get("/halaqah-report", async (c) => {
 const targetSchema = z.object({
   level: z.string().min(1),
   targetPages: z.number().min(1),
+  targetPagesPerWeek: z.number().min(1).optional().nullable(),
   targetJuz: z.number().optional().nullable(),
   description: z.string().nullable().optional(),
 });
@@ -2743,8 +3441,9 @@ app.get("/report-card/:studentId", async (c) => {
       .where(and(...examConditions))
       .orderBy(asc(tahfidzExams.examDate));
 
-    // 2b. Cumulative UKJ Count (Passed Juz - All Time)
-    // We want total juz student has passed UKJ for, regardless of semester
+    // 2b. Cumulative UKJ Count (Juz with a recorded UKJ - All Time)
+    // UKJ has no pass/fail; count every juz the student has taken UKJ for,
+    // regardless of semester
     const passedUKJ = await db
       .select({ juz: tahfidzExams.juz })
       .from(tahfidzExams)
@@ -2752,7 +3451,6 @@ app.get("/report-card/:studentId", async (c) => {
         and(
           eq(tahfidzExams.studentId, studentId),
           eq(tahfidzExams.examCategory, "UKJ"),
-          eq(tahfidzExams.verdict, "pass"),
         ),
       );
     const uniqueJuzUKJ = new Set(
@@ -3293,8 +3991,12 @@ app.get("/exams/template", async (c) => {
         "scoreAdab",
         "notes",
       );
+    } else if (category === "UA") {
+      // UA has no pass/fail
+      headers.push("Nilai Akhir (0-100)", "Catatan");
+      keys.push("finalScore", "notes");
     } else {
-      // UA, Suluk, Other
+      // Suluk, Other
       headers.push(
         "Nilai Akhir (0-100)",
         "Keterangan (Lulus/Tidak/Bersyarat)",
@@ -3489,8 +4191,8 @@ app.post("/exams/import", async (c) => {
           ].map((v) => Number(v) || 0);
 
           calculatedFinalScore = Math.round(
-            scores.reduce((a, b) => a + b, 0) / 4,
-          );
+            (scores.reduce((a, b) => a + b, 0) / 4) * 100,
+          ) / 100;
         } else if (category === "UKJ") {
           payload.juz = row["Juz (Angka)"];
           payload.scoreFluency = row["Kelancaran (0-100)"];
@@ -3506,8 +4208,11 @@ app.post("/exams/import", async (c) => {
             payload.scoreAdab,
           ].map((v) => Number(v) || 0);
           calculatedFinalScore = Math.round(
-            scores.reduce((a, b) => a + b, 0) / 4,
-          );
+            (scores.reduce((a, b) => a + b, 0) / 4) * 100,
+          ) / 100;
+        } else if (category === "UA") {
+          calculatedFinalScore = Number(row["Nilai Akhir (0-100)"]) || 0;
+          payload.notes = row["Catatan"];
         } else {
           calculatedFinalScore = Number(row["Nilai Akhir (0-100)"]) || 0;
 
@@ -3535,8 +4240,21 @@ app.post("/exams/import", async (c) => {
         }
 
         payload.finalScore = calculatedFinalScore;
-        if (category === "UPK" || category === "UKJ") {
-          payload.verdict = calculatedFinalScore >= 75 ? "pass" : "fail";
+        const outOfRange = [
+          payload.scoreFluency,
+          payload.scoreTajwid,
+          payload.scoreMakhraj,
+          payload.scoreAdab,
+          calculatedFinalScore,
+        ].some((v) => v != null && v !== "" && !(Number(v) >= 0 && Number(v) <= 100));
+        if (outOfRange) {
+          failCount++;
+          errors.push({ row: rowNum, error: "Nilai harus angka 0-100", nis: String(nis) });
+          continue;
+        }
+        // UPK, UKJ & UA have no pass/fail verdict
+        if (category === "UPK" || category === "UKJ" || category === "UA") {
+          payload.verdict = null;
         }
 
         // For Suluk and UA, check for duplicate (one per student per semester per academic year)

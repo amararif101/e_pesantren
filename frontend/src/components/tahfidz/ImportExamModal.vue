@@ -365,7 +365,9 @@
                       {{ item.finalScore }}
                     </td>
                     <td class="p-2 text-center">
+                      <span v-if="!item.verdict" class="text-slate-300">-</span>
                       <span
+                        v-else
                         class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                         :class="
                           item.verdict === 'pass'

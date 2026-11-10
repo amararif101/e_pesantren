@@ -111,6 +111,11 @@ const availableRoutes = [
   },
   { path: "/apps/tahfidz/exams", label: "Ujian Tahfidz", category: "Tahfidz" },
   {
+    path: "/apps/tahfidz/rekap-ujian",
+    label: "Rekap Ujian",
+    category: "Tahfidz",
+  },
+  {
     path: "/apps/tahfidz/reports",
     label: "Rapor Tahfidz",
     category: "Tahfidz",
@@ -118,6 +123,11 @@ const availableRoutes = [
   {
     path: "/apps/tahfidz/mading",
     label: "Mading Halaqah",
+    category: "Tahfidz",
+  },
+  {
+    path: "/apps/tahfidz/mading-kelas",
+    label: "Mading Kelas",
     category: "Tahfidz",
   },
   {

@@ -1,0 +1,1 @@
+ALTER TABLE `tahfidz_targets` ADD `target_pages_per_week` int;
